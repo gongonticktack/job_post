@@ -36,8 +36,7 @@ const sampleJobs = [
 const state = {
   jobs: [],
   db: null,
-  supabase: null,
-  crawlApiAvailable: true
+  supabase: null
 };
 
 const els = {
@@ -82,23 +81,6 @@ function bindEvents() {
     await refresh();
   });
   els.crawlForm.addEventListener("submit", handleCrawl);
-}
-
-async function apiRequest(path, options = {}) {
-  if (!state.crawlApiAvailable) throw new Error("API unavailable");
-  const response = await fetch(path, {
-    headers: { "content-type": "application/json", ...(options.headers || {}) },
-    ...options
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || `API error ${response.status}`);
-  }
-  return response.json();
-}
-
-function canUseBrowserCrawler() {
-  return location.protocol === "file:" || ["localhost", "127.0.0.1"].includes(location.hostname);
 }
 
 async function refresh() {
@@ -405,117 +387,18 @@ async function handleCrawl(event) {
 }
 
 async function crawlJobs(listUrl, company, limit) {
-  if (state.crawlApiAvailable) {
-    try {
-      const data = await apiRequest("/api/crawl", {
-        method: "POST",
-        body: JSON.stringify({ url: listUrl, company, limit })
-      });
-      return data.jobs || [];
-    } catch (error) {
-      state.crawlApiAvailable = false;
-      if (!canUseBrowserCrawler()) {
-        throw new Error(`CloudflareのクロールAPIが見つかりません。/api/crawl が404の場合は、Pages Functionsまたは _worker.js がデプロイ対象に含まれているか確認してください。詳細: ${error.message}`);
-      }
-      setStatus(`CloudflareのクロールAPIが使えないためローカル向けのブラウザ取得に切り替えます: ${error.message}`);
-    }
+  if (!window.crawlJobsBrowser) {
+    throw new Error("crawler.js が読み込まれていません。index.html と同じ階層に crawler.js を配置してください。");
   }
-  const listHtml = await fetchText(listUrl);
-  const detailUrls = extractJobLinks(listHtml, listUrl).slice(0, limit);
-  if (!detailUrls.length) {
-    const parsed = parseJobDetail(listHtml, listUrl, company);
-    return parsed.description ? [parsed] : [];
-  }
-
-  const jobs = [];
-  for (const detailUrl of detailUrls) {
-    setStatus(`詳細ページを取得しています... ${jobs.length + 1}/${detailUrls.length}`);
-    try {
-      const html = await fetchText(detailUrl);
-      const job = parseJobDetail(html, detailUrl, company);
-      if (job.description || job.requiredSkills.length || job.preferredSkills.length) jobs.push(job);
-    } catch (error) {
-      console.warn("detail fetch failed", detailUrl, error);
-    }
-  }
-  return jobs;
-}
-
-async function fetchText(url) {
-  const response = await fetch(url, { credentials: "omit" });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.text();
-}
-
-function extractJobLinks(html, baseUrl) {
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  const links = [...doc.querySelectorAll("a[href]")]
-    .map((anchor) => new URL(anchor.getAttribute("href"), baseUrl).href)
-    .filter((href) => /job|career|recruit|posting|detail|id=|no=/i.test(href));
-  return [...new Set(links)].filter((href) => href !== baseUrl);
-}
-
-function parseJobDetail(html, sourceUrl, company) {
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  const text = cleanText(doc.body?.innerText || "");
-  const title = cleanText(doc.querySelector("h1, h2, .jobTitle, .title")?.textContent || "");
-  const incomeRaw = findIncomeText(text);
-  const income = parseIncome(incomeRaw);
-  return {
-    company,
-    title,
-    description: sliceAround(text, /(業務内容|仕事内容|職務内容)/) || text.slice(0, 260),
-    annualIncomeRaw: incomeRaw,
-    annualIncomeMin: income.min,
-    annualIncomeMax: income.max,
-    requiredSkills: extractSkills(text),
-    preferredSkills: [],
-    notes: "",
-    sourceUrl,
-    crawledAt: new Date().toISOString()
-  };
-}
-
-function findIncomeText(text) {
-  const match = text.match(/(?:年収|給与|想定年収).{0,80}?(\d{3,4}).{0,20}?万円(?:.{0,20}?(\d{3,4}).{0,20}?万円)?/);
-  return match ? match[0] : "";
-}
-
-function parseIncome(raw) {
-  const values = (raw.match(/\d{3,4}/g) || []).map(Number);
-  return {
-    min: values.length ? Math.min(...values) : null,
-    max: values.length ? Math.max(...values) : null
-  };
-}
-
-function extractSkills(raw) {
-  if (!raw) return [];
-  const known = [
-    "JavaScript", "TypeScript", "Python", "Java", "C#", "C++", "Go", "Ruby", "PHP",
-    "SQL", "AWS", "Azure", "GCP", "Docker", "Kubernetes", "React", "Vue", "Angular",
-    "Spring", "Linux", "Git", "要件定義", "設計", "クラウド", "データ分析", "機械学習",
-    "生成AI", "プロジェクトマネジメント", "チームリード", "アジャイル", "セキュリティ",
-    "ネットワーク", "データ基盤", "ETL", "BI"
-  ];
-  return [...new Set(known.filter((skill) => new RegExp(escapeRegExp(skill), "i").test(raw)))];
+  return window.crawlJobsBrowser(listUrl, company, limit, setStatus);
 }
 
 function normalizeSkill(skill) {
   return cleanText(skill).replace(/経験$/, "").replace(/スキル$/, "").trim();
 }
 
-function sliceAround(text, pattern) {
-  const index = text.search(pattern);
-  return index >= 0 ? text.slice(index, index + 360) : "";
-}
-
 function cleanText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function setStatus(message) {

@@ -1,6 +1,6 @@
 # 求人スキル分析アプリ
 
-Cloudflare Pagesで静的ファイルを配信し、`supabase-config.json` のURLとanonキーでSupabase REST APIへ接続する構成です。
+Cloudflare Pagesなどで静的ファイルを配信し、`supabase-config.json` のURLとanonキーでSupabase REST APIへ接続する構成です。
 
 ## Supabase準備
 
@@ -11,14 +11,10 @@ anonキーは公開前提のキーです。書き込みを公開したくない�
 
 401が出る場合は、`supabase-permissions.sql` をSupabaseのSQL Editorで実行してください。テーブルだけ作成してポリシーが無い状態だと、anonキーでは読み書きできません。
 
-## Cloudflare Pages
+## 公開
 
-リポジトリをPagesに接続し、Build commandは空、Build output directoryは `/` を指定します。
-
-API:
-
-- `POST /api/crawl`: 求人一覧URLから求人詳細を取得して抽出
+静的ファイルとして公開できます。Build commandは空、Build output directoryは `/` を指定します。
 
 求人の保存と取得はブラウザからSupabaseへ直接行います。`supabase-config.json` が読み込めない場合は、ブラウザ内のIndexedDBへフォールバックします。
 
-`workers.dev` に公開する場合は、ルートの `_worker.js` が `/api/crawl` を処理します。クロール先サイトはCORSを許可していないため、公開環境ではブラウザから直接求人ページを取得できません。必ずCloudflare側の `/api/crawl` 経由にしてください。
+API関連ファイルは使っていません。クロール処理は `crawler.js` にあります。ただしAPIなし構成では、取得先サイトがCORSを許可していない場合、ブラウザから求人ページを取得できません。
