@@ -20,3 +20,5 @@ API:
 - `POST /api/crawl`: 求人一覧URLから求人詳細を取得して抽出
 
 求人の保存と取得はブラウザからSupabaseへ直接行います。`supabase-config.json` が読み込めない場合は、ブラウザ内のIndexedDBへフォールバックします。
+
+`workers.dev` に公開する場合は、ルートの `_worker.js` が `/api/crawl` を処理します。クロール先サイトはCORSを許可していないため、公開環境ではブラウザから直接求人ページを取得できません。必ずCloudflare側の `/api/crawl` 経由にしてください。

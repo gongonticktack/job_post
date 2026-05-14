@@ -97,6 +97,10 @@ async function apiRequest(path, options = {}) {
   return response.json();
 }
 
+function canUseBrowserCrawler() {
+  return location.protocol === "file:" || ["localhost", "127.0.0.1"].includes(location.hostname);
+}
+
 async function refresh() {
   if (state.supabase) {
     try {
@@ -410,7 +414,10 @@ async function crawlJobs(listUrl, company, limit) {
       return data.jobs || [];
     } catch (error) {
       state.crawlApiAvailable = false;
-      setStatus(`CloudflareのクロールAPIが使えないためブラウザから取得します: ${error.message}`);
+      if (!canUseBrowserCrawler()) {
+        throw new Error(`CloudflareのクロールAPIが見つかりません。/api/crawl が404の場合は、Pages Functionsまたは _worker.js がデプロイ対象に含まれているか確認してください。詳細: ${error.message}`);
+      }
+      setStatus(`CloudflareのクロールAPIが使えないためローカル向けのブラウザ取得に切り替えます: ${error.message}`);
     }
   }
   const listHtml = await fetchText(listUrl);
