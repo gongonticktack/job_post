@@ -456,8 +456,10 @@ async function cleanupSavedData() {
 
     for (const job of state.jobs) {
       const cleaned = cleanJobSkills(job);
+      const cleanedIncome = cleanJobIncome(job);
       if (!hasSkillListChanged(job.requiredSkills, cleaned.requiredSkills)
-        && !hasSkillListChanged(job.preferredSkills, cleaned.preferredSkills)) {
+        && !hasSkillListChanged(job.preferredSkills, cleaned.preferredSkills)
+        && !hasIncomeChanged(job, cleanedIncome)) {
         continue;
       }
 
@@ -468,14 +470,17 @@ async function cleanupSavedData() {
           method: "PATCH",
           body: JSON.stringify({
             required_skills: cleaned.requiredSkills,
-            preferred_skills: cleaned.preferredSkills
+            preferred_skills: cleaned.preferredSkills,
+            annual_income_min: cleanedIncome.annualIncomeMin,
+            annual_income_max: cleanedIncome.annualIncomeMax,
+            annual_income_raw: cleanedIncome.annualIncomeRaw
           }),
           headers: { prefer: "return=minimal" }
         });
         await replaceSupabaseJobSkills(job.id, cleaned.requiredSkills, cleaned.preferredSkills);
         removedSkillCount += await deleteOrphanSupabaseSkills(beforeSkillIds);
       } else if (job.sourceUrl) {
-        await saveLocalJobs([{ ...job, ...cleaned }]);
+        await saveLocalJobs([{ ...job, ...cleaned, ...cleanedIncome }]);
       }
     }
 
@@ -497,6 +502,15 @@ function cleanJobSkills(job) {
   return { requiredSkills, preferredSkills };
 }
 
+function cleanJobIncome(job) {
+  const income = parseIncome(job.annualIncomeRaw || "");
+  return {
+    annualIncomeMin: income.min,
+    annualIncomeMax: income.max,
+    annualIncomeRaw: formatIncomeRaw(job.annualIncomeRaw || "", income)
+  };
+}
+
 function cleanSkillList(skills, parser) {
   const ignorePattern = new RegExp(parser.ignoreSkillPatterns?.join("|") || "$^");
   return [...new Set(skills.map(normalizeSkill).filter((skill) => isSavedSkillValid(skill, ignorePattern)))];
@@ -513,6 +527,12 @@ function isSavedSkillValid(skill, ignorePattern) {
 function hasSkillListChanged(before = [], after = []) {
   const left = before.map(normalizeSkill).filter(Boolean);
   return left.length !== after.length || left.some((value, index) => value !== after[index]);
+}
+
+function hasIncomeChanged(job, cleanedIncome) {
+  return job.annualIncomeRaw !== cleanedIncome.annualIncomeRaw
+    || job.annualIncomeMin !== cleanedIncome.annualIncomeMin
+    || job.annualIncomeMax !== cleanedIncome.annualIncomeMax;
 }
 
 async function cleanupAllOrphanSupabaseSkills() {
@@ -1131,7 +1151,10 @@ function parseIncome(raw) {
 
 function pickIncomeTarget(raw) {
   const lines = String(raw || "").split(/\n|。|■/).map((line) => line.trim()).filter(Boolean);
-  return lines.find((line) => /年収|想定年収/.test(line)) || raw || "";
+  const line = lines.find((item) => /年収|想定年収/.test(item)) || raw || "";
+  const match = String(line).match(/(?:想定年収|年収)[\s\S]*/);
+  const target = match ? match[0] : String(line);
+  return target.split(/(?:月給|基本給|賃金形態|残業手当|通勤手当|退職金|社会保険|所定労働時間)/)[0].trim();
 }
 
 function formatIncomeRaw(raw, income) {
