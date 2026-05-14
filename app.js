@@ -91,6 +91,7 @@ async function loadDictionarySettings() {
   if (!config) return;
   config.defaultSkillDictionary = [...(config.skillDictionary || [])];
   config.defaultCertificationDictionary = [...(config.certificationDictionary || [])];
+  config.dictionaryMeta = config.dictionaryMeta || { skill: {}, certification: {} };
   if (state.supabase) {
     try {
       const remote = await getDictionaryTerms();
@@ -99,6 +100,7 @@ async function loadDictionarySettings() {
       }
       if (remote.skillDictionary.length) config.skillDictionary = remote.skillDictionary;
       if (remote.certificationDictionary.length) config.certificationDictionary = remote.certificationDictionary;
+      config.dictionaryMeta = remote.dictionaryMeta;
       return;
     } catch (error) {
       console.warn("dictionary settings remote load failed", error);
@@ -108,6 +110,7 @@ async function loadDictionarySettings() {
     const saved = JSON.parse(localStorage.getItem(DICTIONARY_STORAGE_KEY) || "{}");
     if (Array.isArray(saved.skillDictionary)) config.skillDictionary = saved.skillDictionary;
     if (Array.isArray(saved.certificationDictionary)) config.certificationDictionary = saved.certificationDictionary;
+    if (saved.dictionaryMeta) config.dictionaryMeta = saved.dictionaryMeta;
   } catch (error) {
     console.warn("dictionary settings load failed", error);
   }
@@ -149,16 +152,23 @@ async function saveParserConfigs(companies) {
 }
 
 async function getDictionaryTerms() {
-  const rows = await supabaseRequest("dictionary_terms?select=dictionary_type,term,sort_order&order=dictionary_type.asc,sort_order.asc,term.asc");
+  const rows = await supabaseRequest("dictionary_terms?select=dictionary_type,term,category,color,sort_order&order=dictionary_type.asc,sort_order.asc,term.asc");
   return {
     skillDictionary: rows.filter((row) => row.dictionary_type === "skill").map((row) => row.term),
-    certificationDictionary: rows.filter((row) => row.dictionary_type === "certification").map((row) => row.term)
+    certificationDictionary: rows.filter((row) => row.dictionary_type === "certification").map((row) => row.term),
+    dictionaryMeta: buildDictionaryMeta(rows)
   };
 }
 
 async function saveDictionaryTerms(skillDictionary, certificationDictionary) {
+  const skillEntries = normalizeDictionaryEntries(skillDictionary, "skill");
+  const certificationEntries = normalizeDictionaryEntries(certificationDictionary, "certification");
   if (!state.supabase) {
-    localStorage.setItem(DICTIONARY_STORAGE_KEY, JSON.stringify({ skillDictionary, certificationDictionary }));
+    localStorage.setItem(DICTIONARY_STORAGE_KEY, JSON.stringify({
+      skillDictionary: skillEntries.map((entry) => entry.term),
+      certificationDictionary: certificationEntries.map((entry) => entry.term),
+      dictionaryMeta: buildDictionaryMeta([...skillEntries, ...certificationEntries])
+    }));
     return;
   }
   await supabaseRequest("dictionary_terms?dictionary_type=eq.skill", {
@@ -170,8 +180,20 @@ async function saveDictionaryTerms(skillDictionary, certificationDictionary) {
     headers: { prefer: "return=minimal" }
   });
   const rows = [
-    ...skillDictionary.map((term, index) => ({ dictionary_type: "skill", term, sort_order: index })),
-    ...certificationDictionary.map((term, index) => ({ dictionary_type: "certification", term, sort_order: index }))
+    ...skillEntries.map((entry, index) => ({
+      dictionary_type: "skill",
+      term: entry.term,
+      category: entry.category || null,
+      color: entry.color || null,
+      sort_order: index
+    })),
+    ...certificationEntries.map((entry, index) => ({
+      dictionary_type: "certification",
+      term: entry.term,
+      category: entry.category || null,
+      color: entry.color || null,
+      sort_order: index
+    }))
   ];
   if (rows.length) {
     await supabaseRequest("dictionary_terms", {
@@ -179,6 +201,20 @@ async function saveDictionaryTerms(skillDictionary, certificationDictionary) {
       body: JSON.stringify(rows)
     });
   }
+}
+
+function buildDictionaryMeta(rows) {
+  return rows.reduce((acc, row) => {
+    const type = row.dictionary_type || row.type;
+    const term = row.term;
+    if (!type || !term) return acc;
+    acc[type] = acc[type] || {};
+    acc[type][normalizeDictionaryKey(term)] = {
+      category: row.category || "",
+      color: row.color || ""
+    };
+    return acc;
+  }, { skill: {}, certification: {} });
 }
 
 async function refresh() {
@@ -651,9 +687,12 @@ function renderWordCloud(container, counts, limit, type = "skill") {
   const max = counts[0].count;
   counts.slice(0, limit).forEach(({ name, count }, index) => {
     const weight = count <= 1 || max <= 1 ? 0 : (count - 1) / (max - 1);
+    const meta = getDictionaryMeta(name, type);
     const item = document.createElement("button");
-    item.className = `cloud-word ${getWordCategoryClass(name, type)}`;
+    item.className = `cloud-word ${getWordCategoryClass(name, type, meta)}`;
     item.type = "button";
+    const rgb = colorToRgb(meta.color);
+    if (rgb) item.style.setProperty("--word-rgb", rgb);
     item.style.setProperty("--size", `${12 + weight * 30}px`);
     item.style.setProperty("--alpha", `${0.46 + weight * 0.54}`);
     item.style.setProperty("--delay", `${index * 16}ms`);
@@ -671,7 +710,13 @@ function renderWordCloud(container, counts, limit, type = "skill") {
   });
 }
 
-function getWordCategoryClass(name, type) {
+function getDictionaryMeta(name, type) {
+  const meta = window.JobParserConfig?.dictionaryMeta?.[type]?.[normalizeDictionaryKey(name)];
+  return meta || {};
+}
+
+function getWordCategoryClass(name, type, meta = {}) {
+  if (meta.category) return `word-${meta.category}`;
   if (type === "certification") return "word-certification";
   const value = normalizeSkill(name).toLowerCase();
   if (matchesTerm(value, [
@@ -721,6 +766,17 @@ function getWordCategoryClass(name, type) {
 
 function matchesTerm(value, terms) {
   return terms.some((term) => value === term.toLowerCase());
+}
+
+function colorToRgb(color) {
+  const value = String(color || "").trim();
+  if (!/^#[0-9a-f]{6}$/i.test(value)) return "";
+  const hex = value.slice(1);
+  return [
+    Number.parseInt(hex.slice(0, 2), 16),
+    Number.parseInt(hex.slice(2, 4), 16),
+    Number.parseInt(hex.slice(4, 6), 16)
+  ].join(", ");
 }
 
 function isCurrentFilter(name) {
@@ -835,8 +891,8 @@ function countCertifications(jobs) {
 }
 
 function renderDictionarySettings() {
-  els.skillDictionaryInput.value = (window.JobParserConfig?.skillDictionary || []).join("\n");
-  els.certificationDictionaryInput.value = (window.JobParserConfig?.certificationDictionary || []).join("\n");
+  els.skillDictionaryInput.value = formatDictionaryInput("skill");
+  els.certificationDictionaryInput.value = formatDictionaryInput("certification");
 }
 
 function renderSettingsJobList() {
@@ -872,12 +928,15 @@ function renderSettingsJobList() {
 
 async function handleDictionarySave(event) {
   event.preventDefault();
-  const skillDictionary = parseDictionaryInput(els.skillDictionaryInput.value);
-  const certificationDictionary = parseDictionaryInput(els.certificationDictionaryInput.value);
+  const skillEntries = parseDictionaryInput(els.skillDictionaryInput.value, "skill");
+  const certificationEntries = parseDictionaryInput(els.certificationDictionaryInput.value, "certification");
+  const skillDictionary = skillEntries.map((entry) => entry.term);
+  const certificationDictionary = certificationEntries.map((entry) => entry.term);
   window.JobParserConfig.skillDictionary = skillDictionary;
   window.JobParserConfig.certificationDictionary = certificationDictionary;
+  window.JobParserConfig.dictionaryMeta = buildDictionaryMeta([...skillEntries, ...certificationEntries]);
   try {
-    await saveDictionaryTerms(skillDictionary, certificationDictionary);
+    await saveDictionaryTerms(skillEntries, certificationEntries);
     els.dictionaryStatus.hidden = false;
     els.dictionaryStatus.textContent = state.supabase
       ? "辞書をDBに保存しました。解析とTOPのクラウド表示に反映されます。"
@@ -893,9 +952,12 @@ async function resetDictionarySettings() {
   const config = window.JobParserConfig;
   config.skillDictionary = [...(config.defaultSkillDictionary || [])];
   config.certificationDictionary = [...(config.defaultCertificationDictionary || [])];
+  const skillEntries = normalizeDictionaryEntries(config.skillDictionary, "skill");
+  const certificationEntries = normalizeDictionaryEntries(config.certificationDictionary, "certification");
+  config.dictionaryMeta = buildDictionaryMeta([...skillEntries, ...certificationEntries]);
   localStorage.removeItem(DICTIONARY_STORAGE_KEY);
   try {
-    await saveDictionaryTerms(config.skillDictionary, config.certificationDictionary);
+    await saveDictionaryTerms(skillEntries, certificationEntries);
     renderDictionarySettings();
     els.dictionaryStatus.hidden = false;
     els.dictionaryStatus.textContent = state.supabase
@@ -908,8 +970,69 @@ async function resetDictionarySettings() {
   }
 }
 
-function parseDictionaryInput(value) {
-  return [...new Set(value.split(/\n|,/).map((item) => cleanText(item)).filter(Boolean))];
+function parseDictionaryInput(value, type) {
+  return normalizeDictionaryEntries(
+    value
+      .split(/\n/)
+      .map((line) => {
+        const [term, category, color] = line.split("|").map((item) => cleanText(item));
+        return { term, category, color };
+      }),
+    type
+  );
+}
+
+function normalizeDictionaryEntries(entries, type) {
+  const map = new Map();
+  entries.forEach((entry) => {
+    const normalized = typeof entry === "string"
+      ? { term: cleanText(entry), category: "", color: "" }
+      : {
+          term: cleanText(entry?.term),
+          category: cleanText(entry?.category),
+          color: cleanText(entry?.color)
+        };
+    if (!normalized.term) return;
+    if (!normalized.category) normalized.category = inferDictionaryCategory(normalized.term, type);
+    if (!normalized.color) normalized.color = getCategoryColor(normalized.category);
+    map.set(normalizeDictionaryKey(normalized.term), { ...normalized, type });
+  });
+  return [...map.values()];
+}
+
+function formatDictionaryInput(type) {
+  const config = window.JobParserConfig || {};
+  return (type === "skill" ? config.skillDictionary || [] : config.certificationDictionary || [])
+    .map((term) => {
+      const meta = config.dictionaryMeta?.[type]?.[normalizeDictionaryKey(term)] || {};
+      return [term, meta.category, meta.color].filter(Boolean).join(" | ");
+    })
+    .join("\n");
+}
+
+function normalizeDictionaryKey(term) {
+  return normalizeSkill(term).toLowerCase();
+}
+
+function inferDictionaryCategory(term, type) {
+  if (type === "certification") return "certification";
+  return getWordCategoryClass(term, "skill").replace(/^word-/, "");
+}
+
+function getCategoryColor(category) {
+  return {
+    language: "#f89797",
+    framework: "#fbbf7e",
+    infra: "#7dd3fc",
+    data: "#67e8f9",
+    ai: "#c4b5fd",
+    domain: "#93c5fd",
+    process: "#a7f3d0",
+    management: "#fde047",
+    security: "#fca5a5",
+    certification: "#d8b4fe",
+    general: "#25d6a2"
+  }[category] || "";
 }
 
 async function handleCrawl(event) {
