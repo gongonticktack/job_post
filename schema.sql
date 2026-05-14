@@ -137,7 +137,7 @@ SET parser_config = EXCLUDED.parser_config,
 
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON companies TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE ON jobs TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON jobs TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON skills TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON job_skills TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dictionary_terms TO anon, authenticated;
@@ -157,6 +157,7 @@ DROP POLICY IF EXISTS "allow anon update companies" ON companies;
 DROP POLICY IF EXISTS "allow anon read jobs" ON jobs;
 DROP POLICY IF EXISTS "allow anon write jobs" ON jobs;
 DROP POLICY IF EXISTS "allow anon update jobs" ON jobs;
+DROP POLICY IF EXISTS "allow anon delete jobs" ON jobs;
 DROP POLICY IF EXISTS "allow anon read skills" ON skills;
 DROP POLICY IF EXISTS "allow anon write skills" ON skills;
 DROP POLICY IF EXISTS "allow anon update skills" ON skills;
@@ -197,6 +198,10 @@ CREATE POLICY "allow anon update jobs"
 ON jobs FOR UPDATE TO anon, authenticated
 USING (true)
 WITH CHECK (true);
+
+CREATE POLICY "allow anon delete jobs"
+ON jobs FOR DELETE TO anon, authenticated
+USING (true);
 
 CREATE POLICY "allow anon read skills"
 ON skills FOR SELECT TO anon, authenticated

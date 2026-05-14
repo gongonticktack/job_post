@@ -6,13 +6,14 @@
     <title>Talent Market Intelligence</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <header class="app-header">
-      <div>
-        <h1>Talent Market Intelligence</h1>
+      <div class="brand">
+        <h1>TMI</h1>
+        <p>Talent Market Intelligence</p>
       </div>
       <div class="header-actions">
         <button class="settings-button" data-view="settings" type="button">設定</button>
@@ -171,7 +172,15 @@
             <button class="primary-button" type="submit">辞書を保存</button>
           </form>
 
-          <div id="dictionaryStatus" class="status">辞書はこのブラウザに保存され、求人票解析とクラウド表示に反映されます。</div>
+          <div id="dictionaryStatus" class="status" hidden></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>求人情報管理</h2>
+          </div>
+          <div id="settingsJobStatus" class="status" hidden></div>
+          <div id="settingsJobList" class="settings-job-list empty">削除できる求人情報がありません</div>
         </section>
       </section>
     </main>

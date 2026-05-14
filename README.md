@@ -9,12 +9,9 @@ Cloudflare Pagesなどで静的ファイルを配信し、`supabase-config.json`
 
 anonキーは公開前提のキーです。書き込みを公開したくない場合は、SupabaseのRLSポリシーやCloudflare Accessで保護してください。
 
-401が出る場合は、`supabase-permissions.sql` をSupabaseのSQL Editorで実行してください。テーブルだけ作成してポリシーが無い状態だと、anonキーでは読み書きできません。
+`schema.sql` には求人、スキル、辞書、会社別の求人票構成ルール、RLSポリシーがまとまっています。まっさらなSupabase環境なら、この1ファイルだけで必要なDB構成を作れます。
 
-既にDB作成済みの状態で直接入力ページの追加項目を使う場合は、`supabase-add-job-fields.sql` もSupabaseのSQL Editorで実行してください。
-過去に元テキスト・雇用形態・想定役職・労働形態の列を追加済みで不要な場合は、`supabase-drop-unused-job-fields.sql` を実行すると削除できます。
-辞書をSupabaseで管理する場合は、`supabase-dictionaries.sql` をSupabaseのSQL Editorで実行してください。設定画面のスキル辞書・資格辞書がDBに保存されます。
-会社ごとの求人票構成ルールをSupabaseで管理する場合は、`supabase-parser-configs.sql` をSupabaseのSQL Editorで実行してください。NTT DATA形式の初期設定も投入されます。
+既存DBを更新する場合も `schema.sql` を再実行できます。過去に元テキスト・雇用形態・想定役職・労働形態の列を追加済みで不要な場合は、`supabase-drop-unused-job-fields.sql` を実行すると削除できます。
 
 ## 公開
 

@@ -44,6 +44,8 @@ const els = {
   certificationDictionaryInput: document.querySelector("#certificationDictionaryInput"),
   dictionaryStatus: document.querySelector("#dictionaryStatus"),
   resetDictionaryButton: document.querySelector("#resetDictionaryButton"),
+  settingsJobStatus: document.querySelector("#settingsJobStatus"),
+  settingsJobList: document.querySelector("#settingsJobList"),
   template: document.querySelector("#jobCardTemplate")
 };
 
@@ -65,6 +67,14 @@ function bindEvents() {
   els.settingsButton.addEventListener("click", () => switchView("settings"));
   els.skillTypeFilter.addEventListener("change", render);
   els.searchInput.addEventListener("input", render);
+  [els.skillChart, els.certificationChart].forEach((chart) => {
+    chart.addEventListener("click", (event) => {
+      if (event.target === chart && els.searchInput.value.trim()) {
+        els.searchInput.value = "";
+        render();
+      }
+    });
+  });
   syncCompanySelect(els.crawlCompanySelect, els.companyName);
   syncCompanySelect(els.manualCompanySelect, els.manualCompanyName);
   els.crawlCompanySelect.addEventListener("change", () => syncCompanySelect(els.crawlCompanySelect, els.companyName));
@@ -364,11 +374,46 @@ function saveLocalJobs(jobs) {
   });
 }
 
+function deleteLocalJob(sourceUrl) {
+  return new Promise((resolve, reject) => {
+    const transaction = state.db.transaction(STORE, "readwrite");
+    transaction.objectStore(STORE).delete(sourceUrl);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
+
+async function deleteJob(job) {
+  const label = job.title || job.company || "この求人";
+  if (!window.confirm(`${label} を削除しますか？`)) return;
+
+  try {
+    if (state.supabase && job.id) {
+      await supabaseRequest(`jobs?id=eq.${encodeURIComponent(job.id)}`, {
+        method: "DELETE",
+        headers: { prefer: "return=minimal" }
+      });
+    } else if (job.sourceUrl) {
+      await deleteLocalJob(job.sourceUrl);
+    } else {
+      throw new Error("削除対象のIDが見つかりません。");
+    }
+
+    setSettingsJobStatus("求人情報を削除しました。");
+    await refresh();
+  } catch (error) {
+    setSettingsJobStatus(`削除に失敗しました: ${error.message}`);
+  }
+}
+
 function switchView(viewId) {
   els.tabs.forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === viewId));
   els.settingsButton.classList.toggle("is-active", viewId === "settings");
   els.views.forEach((view) => view.classList.toggle("is-active", view.id === viewId));
-  if (viewId === "settings") renderDictionarySettings();
+  if (viewId === "settings") {
+    renderDictionarySettings();
+    renderSettingsJobList();
+  }
 }
 
 function render() {
@@ -378,6 +423,7 @@ function render() {
   renderSkillChart();
   renderCertificationChart();
   renderJobList(els.jobList, visibleJobs);
+  renderSettingsJobList();
 }
 
 function updateCompanyOptions() {
@@ -463,8 +509,9 @@ function renderWordCloud(container, counts, limit) {
     item.style.setProperty("--delay", `${index * 16}ms`);
     item.title = `${name}: ${count}件`;
     item.textContent = name;
+    item.classList.toggle("is-filtering", isCurrentFilter(name));
     item.addEventListener("click", () => {
-      els.searchInput.value = name;
+      els.searchInput.value = isCurrentFilter(name) ? "" : name;
       render();
     });
     const badge = document.createElement("span");
@@ -472,6 +519,10 @@ function renderWordCloud(container, counts, limit) {
     item.appendChild(badge);
     container.appendChild(item);
   });
+}
+
+function isCurrentFilter(name) {
+  return els.searchInput.value.trim().toLowerCase() === name.toLowerCase();
 }
 
 function renderJobList(container, jobs) {
@@ -566,6 +617,37 @@ function renderDictionarySettings() {
   els.certificationDictionaryInput.value = (window.JobParserConfig?.certificationDictionary || []).join("\n");
 }
 
+function renderSettingsJobList() {
+  if (!els.settingsJobList) return;
+  els.settingsJobList.innerHTML = "";
+  els.settingsJobList.classList.toggle("empty", state.jobs.length === 0);
+  if (!state.jobs.length) {
+    els.settingsJobList.textContent = "削除できる求人情報がありません";
+    return;
+  }
+
+  state.jobs.forEach((job) => {
+    const item = document.createElement("article");
+    item.className = "settings-job-item";
+
+    const body = document.createElement("div");
+    const title = document.createElement("h3");
+    title.textContent = job.title || "職種名未取得";
+    const meta = document.createElement("p");
+    meta.textContent = [job.company, job.annualIncomeRaw, job.location].filter(Boolean).join(" / ") || "詳細情報なし";
+    body.append(title, meta);
+
+    const button = document.createElement("button");
+    button.className = "danger-button";
+    button.type = "button";
+    button.textContent = "削除";
+    button.addEventListener("click", () => deleteJob(job));
+
+    item.append(body, button);
+    els.settingsJobList.appendChild(item);
+  });
+}
+
 async function handleDictionarySave(event) {
   event.preventDefault();
   const skillDictionary = parseDictionaryInput(els.skillDictionaryInput.value);
@@ -574,11 +656,13 @@ async function handleDictionarySave(event) {
   window.JobParserConfig.certificationDictionary = certificationDictionary;
   try {
     await saveDictionaryTerms(skillDictionary, certificationDictionary);
+    els.dictionaryStatus.hidden = false;
     els.dictionaryStatus.textContent = state.supabase
       ? "辞書をDBに保存しました。解析とTOPのクラウド表示に反映されます。"
-      : "辞書をこのブラウザに保存しました。Supabase接続時はDBに保存されます。";
+      : "辞書を保存しました。解析とTOPのクラウド表示に反映されます。";
     render();
   } catch (error) {
+    els.dictionaryStatus.hidden = false;
     els.dictionaryStatus.textContent = `辞書保存に失敗しました: ${error.message}`;
   }
 }
@@ -591,11 +675,13 @@ async function resetDictionarySettings() {
   try {
     await saveDictionaryTerms(config.skillDictionary, config.certificationDictionary);
     renderDictionarySettings();
+    els.dictionaryStatus.hidden = false;
     els.dictionaryStatus.textContent = state.supabase
       ? "辞書を初期値に戻してDBへ保存しました。"
       : "辞書を初期値に戻しました。";
     render();
   } catch (error) {
+    els.dictionaryStatus.hidden = false;
     els.dictionaryStatus.textContent = `辞書の初期化に失敗しました: ${error.message}`;
   }
 }
@@ -897,4 +983,9 @@ function setStatus(message) {
 
 function setInputStatus(message) {
   els.manualStatus.textContent = message;
+}
+
+function setSettingsJobStatus(message) {
+  els.settingsJobStatus.hidden = false;
+  els.settingsJobStatus.textContent = message;
 }
