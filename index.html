@@ -12,14 +12,16 @@
   <body>
     <header class="app-header">
       <div>
-        <p class="eyebrow">Job Post Analytics</p>
         <h1>Talent Market Intelligence</h1>
       </div>
-      <nav class="tabs" aria-label="ページ切り替え">
-        <button class="tab is-active" data-view="dashboard">TOP</button>
-        <button class="tab" data-view="crawler">クローリング</button>
-        <button class="tab" data-view="manual">直接入力</button>
-      </nav>
+      <div class="header-actions">
+        <button class="settings-button" data-view="settings" type="button">設定</button>
+        <nav class="tabs" aria-label="ページ切り替え">
+          <button class="tab is-active" data-view="dashboard">TOP</button>
+          <button class="tab" data-view="crawler">クローリング</button>
+          <button class="tab" data-view="manual">直接入力</button>
+        </nav>
+      </div>
     </header>
 
     <main>
@@ -53,6 +55,13 @@
               </select>
             </div>
             <div id="skillChart" class="skill-chart empty">データがありません</div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>資格傾向</h2>
+            </div>
+            <div id="certificationChart" class="skill-chart empty">データがありません</div>
           </section>
 
           <section class="panel">
@@ -143,6 +152,29 @@
           <h2>解析結果プレビュー</h2>
           <div id="manualPreview" class="job-list empty">解析した求人がここに表示されます</div>
           <div id="manualEditor" class="manual-editor" hidden></div>
+        </section>
+      </section>
+
+      <section id="settings" class="view">
+        <section class="panel crawler-panel">
+          <div class="panel-head">
+            <h2>辞書設定</h2>
+            <button id="resetDictionaryButton" class="ghost-button" type="button">初期値に戻す</button>
+          </div>
+
+          <form id="dictionaryForm" class="crawl-form">
+            <label>
+              スキル辞書
+              <textarea id="skillDictionaryInput" rows="14" placeholder="1行に1単語で入力"></textarea>
+            </label>
+            <label>
+              資格辞書
+              <textarea id="certificationDictionaryInput" rows="10" placeholder="1行に1資格で入力"></textarea>
+            </label>
+            <button class="primary-button" type="submit">辞書を保存</button>
+          </form>
+
+          <div id="dictionaryStatus" class="status">辞書はこのブラウザに保存され、求人票解析とクラウド表示に反映されます。</div>
         </section>
       </section>
     </main>

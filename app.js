@@ -3,6 +3,7 @@
 const DB_NAME = "job-post-analytics";
 const DB_VERSION = 1;
 const STORE = "jobs";
+const DICTIONARY_STORAGE_KEY = "job-post-dictionaries";
 
 const sampleJobs = [
   {
@@ -46,6 +47,7 @@ const state = {
 
 const els = {
   tabs: document.querySelectorAll(".tab"),
+  settingsButton: document.querySelector(".settings-button"),
   views: document.querySelectorAll(".view"),
   jobCount: document.querySelector("#jobCount"),
   companyCount: document.querySelector("#companyCount"),
@@ -53,6 +55,7 @@ const els = {
   avgIncome: document.querySelector("#avgIncome"),
   skillTypeFilter: document.querySelector("#skillTypeFilter"),
   skillChart: document.querySelector("#skillChart"),
+  certificationChart: document.querySelector("#certificationChart"),
   searchInput: document.querySelector("#searchInput"),
   jobList: document.querySelector("#jobList"),
   crawlForm: document.querySelector("#crawlForm"),
@@ -70,6 +73,11 @@ const els = {
   manualPreview: document.querySelector("#manualPreview"),
   manualEditor: document.querySelector("#manualEditor"),
   parseSampleButton: document.querySelector("#parseSampleButton"),
+  dictionaryForm: document.querySelector("#dictionaryForm"),
+  skillDictionaryInput: document.querySelector("#skillDictionaryInput"),
+  certificationDictionaryInput: document.querySelector("#certificationDictionaryInput"),
+  dictionaryStatus: document.querySelector("#dictionaryStatus"),
+  resetDictionaryButton: document.querySelector("#resetDictionaryButton"),
   seedButton: document.querySelector("#seedButton"),
   template: document.querySelector("#jobCardTemplate")
 };
@@ -77,6 +85,7 @@ const els = {
 init();
 
 async function init() {
+  loadDictionarySettings();
   state.db = await openDb();
   state.supabase = await loadSupabaseConfig();
   bindEvents();
@@ -87,8 +96,11 @@ function bindEvents() {
   els.tabs.forEach((tab) => {
     tab.addEventListener("click", () => switchView(tab.dataset.view));
   });
+  els.settingsButton.addEventListener("click", () => switchView("settings"));
   els.skillTypeFilter.addEventListener("change", render);
   els.searchInput.addEventListener("input", render);
+  syncCompanySelect(els.crawlCompanySelect, els.companyName);
+  syncCompanySelect(els.manualCompanySelect, els.manualCompanyName);
   els.crawlCompanySelect.addEventListener("change", () => syncCompanySelect(els.crawlCompanySelect, els.companyName));
   els.manualCompanySelect.addEventListener("change", () => syncCompanySelect(els.manualCompanySelect, els.manualCompanyName));
   els.seedButton.addEventListener("click", async () => {
@@ -99,6 +111,22 @@ function bindEvents() {
   els.crawlForm.addEventListener("submit", handleCrawl);
   els.manualForm.addEventListener("submit", handleManualPreview);
   els.parseSampleButton.addEventListener("click", handleManualPreview);
+  els.dictionaryForm.addEventListener("submit", handleDictionarySave);
+  els.resetDictionaryButton.addEventListener("click", resetDictionarySettings);
+}
+
+function loadDictionarySettings() {
+  const config = window.JobParserConfig;
+  if (!config) return;
+  config.defaultSkillDictionary = [...(config.skillDictionary || [])];
+  config.defaultCertificationDictionary = [...(config.certificationDictionary || [])];
+  try {
+    const saved = JSON.parse(localStorage.getItem(DICTIONARY_STORAGE_KEY) || "{}");
+    if (Array.isArray(saved.skillDictionary)) config.skillDictionary = saved.skillDictionary;
+    if (Array.isArray(saved.certificationDictionary)) config.certificationDictionary = saved.certificationDictionary;
+  } catch (error) {
+    console.warn("dictionary settings load failed", error);
+  }
 }
 
 async function refresh() {
@@ -296,13 +324,16 @@ function saveLocalJobs(jobs) {
 
 function switchView(viewId) {
   els.tabs.forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === viewId));
+  els.settingsButton.classList.toggle("is-active", viewId === "settings");
   els.views.forEach((view) => view.classList.toggle("is-active", view.id === viewId));
+  if (viewId === "settings") renderDictionarySettings();
 }
 
 function render() {
   updateCompanyOptions();
   renderMetrics();
   renderSkillChart();
+  renderCertificationChart();
   renderJobList(els.jobList, filterJobs(state.jobs));
 }
 
@@ -324,6 +355,8 @@ function updateCompanyOptions() {
     select.appendChild(custom);
     select.value = companies.includes(current) || current === "custom" ? current : companies[0];
   });
+  syncCompanySelect(els.crawlCompanySelect, els.companyName);
+  syncCompanySelect(els.manualCompanySelect, els.manualCompanyName);
 }
 
 function renderMetrics() {
@@ -351,9 +384,25 @@ function renderSkillChart() {
     return;
   }
 
+  renderWordCloud(els.skillChart, counts, 36);
+}
+
+function renderCertificationChart() {
+  const counts = countCertifications(state.jobs);
+  els.certificationChart.innerHTML = "";
+  els.certificationChart.classList.toggle("empty", counts.length === 0);
+  els.certificationChart.classList.toggle("word-cloud", counts.length > 0);
+  if (!counts.length) {
+    els.certificationChart.textContent = "データがありません";
+    return;
+  }
+  renderWordCloud(els.certificationChart, counts, 28);
+}
+
+function renderWordCloud(container, counts, limit) {
   const max = counts[0].count;
   const min = counts[counts.length - 1].count;
-  counts.slice(0, 36).forEach(({ name, count }, index) => {
+  counts.slice(0, limit).forEach(({ name, count }, index) => {
     const weight = max === min ? 1 : (count - min) / (max - min);
     const item = document.createElement("button");
     item.className = "cloud-word";
@@ -370,7 +419,7 @@ function renderSkillChart() {
     const badge = document.createElement("span");
     badge.textContent = count;
     item.appendChild(badge);
-    els.skillChart.appendChild(item);
+    container.appendChild(item);
   });
 }
 
@@ -425,6 +474,8 @@ function filterJobs(jobs) {
     job.annualIncomeRaw,
     job.appealPoints,
     job.location,
+    job.requiredCertifications,
+    job.preferredCertifications,
     ...(job.requiredSkills || []),
     ...(job.preferredSkills || []),
     job.notes
@@ -441,6 +492,52 @@ function countSkills(jobs, key) {
   return [...map.entries()]
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ja"));
+}
+
+function countCertifications(jobs) {
+  const map = new Map();
+  jobs.flatMap((job) => [
+    ...extractCertificationsFromText(job.requiredCertifications || ""),
+    ...extractCertificationsFromText(job.preferredCertifications || ""),
+    ...extractCertificationsFromText(job.notes || "")
+  ]).forEach((certification) => {
+    const normalized = normalizeSkill(certification);
+    if (!normalized) return;
+    map.set(normalized, (map.get(normalized) || 0) + 1);
+  });
+  return [...map.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ja"));
+}
+
+function renderDictionarySettings() {
+  els.skillDictionaryInput.value = (window.JobParserConfig?.skillDictionary || []).join("\n");
+  els.certificationDictionaryInput.value = (window.JobParserConfig?.certificationDictionary || []).join("\n");
+}
+
+function handleDictionarySave(event) {
+  event.preventDefault();
+  const skillDictionary = parseDictionaryInput(els.skillDictionaryInput.value);
+  const certificationDictionary = parseDictionaryInput(els.certificationDictionaryInput.value);
+  window.JobParserConfig.skillDictionary = skillDictionary;
+  window.JobParserConfig.certificationDictionary = certificationDictionary;
+  localStorage.setItem(DICTIONARY_STORAGE_KEY, JSON.stringify({ skillDictionary, certificationDictionary }));
+  els.dictionaryStatus.textContent = "辞書を保存しました。解析とTOPのクラウド表示に反映されます。";
+  render();
+}
+
+function resetDictionarySettings() {
+  const config = window.JobParserConfig;
+  config.skillDictionary = [...(config.defaultSkillDictionary || [])];
+  config.certificationDictionary = [...(config.defaultCertificationDictionary || [])];
+  localStorage.removeItem(DICTIONARY_STORAGE_KEY);
+  renderDictionarySettings();
+  els.dictionaryStatus.textContent = "辞書を初期値に戻しました。";
+  render();
+}
+
+function parseDictionaryInput(value) {
+  return [...new Set(value.split(/\n|,/).map((item) => cleanText(item)).filter(Boolean))];
 }
 
 async function handleCrawl(event) {
@@ -491,7 +588,8 @@ async function saveManualDraft() {
     await saveJobs([job]);
     state.manualDraft = job;
     renderJobList(els.manualPreview, [job]);
-    setInputStatus("求人票を解析してDBに保存しました。TOPページに反映済みです。");
+    clearManualInput();
+    setInputStatus("保存しました。次の求人票を入力できます。");
     await refresh();
   } catch (error) {
     setInputStatus(`保存に失敗しました: ${error.message}`);
@@ -506,8 +604,10 @@ async function crawlJobs(listUrl, company, limit) {
 }
 
 function syncCompanySelect(select, input) {
-  if (select.value !== "custom") input.value = select.value;
-  input.focus();
+  const isCustom = select.value === "custom";
+  input.disabled = !isCustom;
+  if (!isCustom) input.value = select.value;
+  if (isCustom) input.focus();
 }
 
 function parseManualJobText(text, fallbackCompany) {
@@ -575,6 +675,8 @@ function renderManualEditor(job) {
     <label>職務内容<textarea data-field="description" rows="5"></textarea></label>
     <label>必須スキル<textarea data-field="requiredSkills" rows="4"></textarea></label>
     <label>歓迎スキル<textarea data-field="preferredSkills" rows="4"></textarea></label>
+    <label>必要資格<textarea data-field="requiredCertifications" rows="3"></textarea></label>
+    <label>歓迎資格<textarea data-field="preferredCertifications" rows="3"></textarea></label>
     <label>アピールポイント<textarea data-field="appealPoints" rows="5"></textarea></label>
     <label>補足・資格・語学<textarea data-field="notes" rows="5"></textarea></label>
   `;
@@ -585,6 +687,8 @@ function renderManualEditor(job) {
   setEditorValue("description", job.description);
   setEditorValue("requiredSkills", (job.requiredSkills || []).join("\n"));
   setEditorValue("preferredSkills", (job.preferredSkills || []).join("\n"));
+  setEditorValue("requiredCertifications", job.requiredCertifications);
+  setEditorValue("preferredCertifications", job.preferredCertifications);
   setEditorValue("appealPoints", job.appealPoints);
   setEditorValue("notes", job.notes);
   els.manualEditor.querySelector("#manualSaveButton").addEventListener("click", saveManualDraft);
@@ -610,12 +714,23 @@ function readManualEditorJob() {
     location: get("location"),
     requiredSkills: splitEditorList(get("requiredSkills")),
     preferredSkills: splitEditorList(get("preferredSkills")),
+    requiredCertifications: get("requiredCertifications"),
+    preferredCertifications: get("preferredCertifications"),
     appealPoints: get("appealPoints"),
     notes: get("notes"),
     inputMethod: "manual"
   };
   job.sourceUrl = `manual:${hashText(`${job.company}\n${job.title}\n${job.description.slice(0, 120)}`)}`;
   return job;
+}
+
+function clearManualInput() {
+  els.manualText.value = "";
+  els.manualPreview.innerHTML = "解析した求人がここに表示されます";
+  els.manualPreview.classList.add("empty");
+  els.manualEditor.hidden = true;
+  els.manualEditor.innerHTML = "";
+  state.manualDraft = null;
 }
 
 function splitEditorList(value) {
@@ -676,6 +791,12 @@ function extractSkillsFromText(raw, parser = getCompanyParser()) {
     .filter((item) => item.length >= 2 && item.length <= 42)
     .filter((item) => !ignorePattern.test(item));
   return [...new Set([...found, ...bulletItems].map(normalizeSkill).filter(Boolean))].slice(0, 24);
+}
+
+function extractCertificationsFromText(raw) {
+  if (!raw) return [];
+  const dictionary = window.JobParserConfig?.certificationDictionary || [];
+  return [...new Set(dictionary.filter((name) => new RegExp(escapeRegExp(name), "i").test(raw)))];
 }
 
 function hashText(text) {

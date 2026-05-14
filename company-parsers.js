@@ -40,5 +40,13 @@ window.JobParserConfig = {
     "ステークホルダーマネジメント", "チームリード", "アジャイル", "セキュリティ",
     "ネットワーク", "データベース", "データ基盤", "ETL", "BI", "QCD", "顧客折衝",
     "PL", "PM", "サプライチェーン", "物流", "調達", "生産計画", "在庫", "品質管理"
+  ],
+  certificationDictionary: [
+    "PMP", "IPA", "プロジェクトマネージャ", "システムアーキテクト", "データベース",
+    "ネットワーク", "情報処理安全確保支援士", "ASCM", "CPIM", "CSCP", "CLTD",
+    "SAP S/4HANA", "Oracle Cloud SCM", "Kinaxis Maestro", "Anaplan", "mcframe",
+    "応用情報技術者", "基本情報技術者", "AWS Certified Solutions Architect",
+    "AWS Certified Developer", "AWS Certified SysOps Administrator",
+    "Azure Administrator", "Azure Solutions Architect", "Google Cloud Professional Cloud Architect"
   ]
 };
