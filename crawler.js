@@ -114,8 +114,16 @@
       .split(/\n|・|●|■|,|、|;/)
       .map((item) => cleanText(item).replace(/^[\-\u30fb\s]+/, ""))
       .filter((item) => item.length >= 2 && item.length <= 28)
+      .filter((item) => !isSentenceLikeSkill(item))
       .filter((item) => !/(必須|歓迎|条件|経験|以上|以下|年収|勤務地|勤務)/.test(item));
     return [...new Set([...found, ...bulletItems].map(normalizeSkill).filter(Boolean))].slice(0, 18);
+  }
+
+  function isSentenceLikeSkill(item) {
+    if (/[のにをはがでへもとや]/.test(item)) return true;
+    if (/[（）()。！？!?]/.test(item)) return true;
+    return /(方|こと|もの|ため|場合|いずれか|下記|要件|お持ち|興味|ある|できる|経験がある|経験をお持ち|活用したこと|業界|会社|領域向け)$/.test(item)
+      || /(に関する|について|として|もしくは|または|および|ならびに|等において|をお持ち|を活用|を担当|における|に向け|から|まで|より)/.test(item);
   }
 
   function normalizeSkill(skill) {

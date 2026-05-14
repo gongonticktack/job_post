@@ -278,7 +278,7 @@ async function saveSupabaseJobs(jobs) {
 }
 
 async function saveSupabaseSkills(jobId, skills, skillType) {
-  const normalizedSkills = [...new Set(skills.map(normalizeSkill).filter(Boolean))];
+  const normalizedSkills = [...new Set(skills.map(normalizeSkill).filter((skill) => isSavedSkillValid(skill, /$^/)))];
   for (const name of normalizedSkills) {
     const rows = await supabaseRequest("skills?on_conflict=name", {
       method: "POST",
@@ -328,9 +328,13 @@ function toClientJob(row) {
 }
 
 function normalizeClientJob(job) {
+  const company = canonicalCompanyName(job.company || "");
+  const parser = getCompanyParser(company);
   return {
     ...job,
-    company: canonicalCompanyName(job.company || "")
+    company,
+    requiredSkills: cleanSkillList(job.requiredSkills || [], parser),
+    preferredSkills: cleanSkillList(job.preferredSkills || [], parser)
   };
 }
 
@@ -1016,6 +1020,7 @@ function readManualEditorJob() {
   const annualIncomeSource = get("annualIncomeRaw");
   const income = parseIncome(annualIncomeSource);
   const annualIncomeRaw = formatIncomeRaw(annualIncomeSource, income);
+  const parser = getCompanyParser(get("company") || state.manualDraft?.company);
   const job = {
     ...state.manualDraft,
     company: canonicalCompanyName(get("company") || "未設定"),
@@ -1025,8 +1030,8 @@ function readManualEditorJob() {
     annualIncomeMin: income.min,
     annualIncomeMax: income.max,
     location: get("location"),
-    requiredSkills: splitEditorList(get("requiredSkills")),
-    preferredSkills: splitEditorList(get("preferredSkills")),
+    requiredSkills: splitEditorList(get("requiredSkills"), parser),
+    preferredSkills: splitEditorList(get("preferredSkills"), parser),
     requiredCertifications: get("requiredCertifications"),
     preferredCertifications: get("preferredCertifications"),
     appealPoints: get("appealPoints"),
@@ -1046,8 +1051,9 @@ function clearManualInput() {
   state.manualDraft = null;
 }
 
-function splitEditorList(value) {
-  return [...new Set(value.split(/\n|,|、/).map(normalizeSkill).filter(Boolean))];
+function splitEditorList(value, parser = getCompanyParser()) {
+  const ignorePattern = new RegExp(parser.ignoreSkillPatterns?.join("|") || "$^");
+  return [...new Set(value.split(/\n|,|、/).map(normalizeSkill).filter((skill) => isSavedSkillValid(skill, ignorePattern)))];
 }
 
 function getCompanyParser(company) {
@@ -1181,10 +1187,13 @@ function extractSkillsFromText(raw, parser = getCompanyParser()) {
 function isSkillLikeText(item, ignorePattern) {
   if (!item || item.length < 2 || item.length > 24) return false;
   if (ignorePattern.test(item)) return false;
-  if (item.includes("の")) return false;
+  if (/[のにをはがでへもとや]/.test(item)) return false;
   if (/[（）()]/.test(item)) return false;
-  if (/(方|こと|もの|いずれか|下記|要件|満たす|お持ち|興味|ある|経験がある|経験をお持ち|活用したこと|業界|会社|領域向け)$/.test(item)) return false;
-  if (/(に関する|について|として|もしくは|または|等において|どこかの|若手の方)/.test(item)) return false;
+  if (/[。！？!?]/.test(item)) return false;
+  if (/(方|こと|もの|ため|場合|いずれか|下記|要件|満たす|お持ち|興味|ある|できる|したい|いただく|いただき|ください|経験がある|経験をお持ち|活用したこと|業界|会社|領域向け)$/.test(item)) return false;
+  if (/(に関する|について|として|もしくは|または|および|ならびに|かつ|等において|どこかの|若手の方|経験あり|経験があり|経験を有する|担当経験|開発経験を|知見もしくは|業務知見もしくは)/.test(item)) return false;
+  if (/(をお持ち|を活用|を担当|を推進|を支援|を行|を実施|を経験|を目指|に興味|に精通|に参画|に従事|に携わ|における|に向け|に至る|から|まで|より)/.test(item)) return false;
+  if (/(下記|以下|上記|例|目安|歓迎|必須|応募|募集|求める|対象|職務|業務|待遇|勤務地|語学|資格|経験|知識|スキル).{4,}/.test(item)) return false;
   if (item.length > 14 && !/[A-Za-z0-9]/.test(item)) return false;
   return true;
 }
