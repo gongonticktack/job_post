@@ -135,10 +135,107 @@ ON CONFLICT (company_name) DO UPDATE
 SET parser_config = EXCLUDED.parser_config,
     enabled = EXCLUDED.enabled;
 
+INSERT INTO dictionary_terms (dictionary_type, term, sort_order)
+VALUES
+  ('skill', 'JavaScript', 1),
+  ('skill', 'TypeScript', 2),
+  ('skill', 'Python', 3),
+  ('skill', 'Java', 4),
+  ('skill', 'C#', 5),
+  ('skill', 'C++', 6),
+  ('skill', 'Go', 7),
+  ('skill', 'Ruby', 8),
+  ('skill', 'PHP', 9),
+  ('skill', 'SQL', 10),
+  ('skill', 'AWS', 11),
+  ('skill', 'Azure', 12),
+  ('skill', 'GCP', 13),
+  ('skill', 'Docker', 14),
+  ('skill', 'Kubernetes', 15),
+  ('skill', 'React', 16),
+  ('skill', 'Vue', 17),
+  ('skill', 'Angular', 18),
+  ('skill', 'Spring', 19),
+  ('skill', 'Linux', 20),
+  ('skill', 'Git', 21),
+  ('skill', 'SCM', 22),
+  ('skill', 'ERP', 23),
+  ('skill', 'SAP', 24),
+  ('skill', 'SAP S/4HANA', 25),
+  ('skill', 'Oracle Cloud SCM', 26),
+  ('skill', 'Kinaxis', 27),
+  ('skill', 'Kinaxis Maestro', 28),
+  ('skill', 'Anaplan', 29),
+  ('skill', 'O9', 30),
+  ('skill', 'mcframe', 31),
+  ('skill', 'PMP', 32),
+  ('skill', 'IPA', 33),
+  ('skill', 'ASCM', 34),
+  ('skill', 'CPIM', 35),
+  ('skill', 'CSCP', 36),
+  ('skill', 'CLTD', 37),
+  ('skill', 'IoT', 38),
+  ('skill', 'DX', 39),
+  ('skill', '要件定義', 40),
+  ('skill', '設計', 41),
+  ('skill', '開発', 42),
+  ('skill', '運用', 43),
+  ('skill', 'クラウド', 44),
+  ('skill', 'データ分析', 45),
+  ('skill', '機械学習', 46),
+  ('skill', '生成AI', 47),
+  ('skill', 'プロジェクトマネジメント', 48),
+  ('skill', 'ステークホルダーマネジメント', 49),
+  ('skill', 'チームリード', 50),
+  ('skill', 'アジャイル', 51),
+  ('skill', 'セキュリティ', 52),
+  ('skill', 'ネットワーク', 53),
+  ('skill', 'データベース', 54),
+  ('skill', 'データ基盤', 55),
+  ('skill', 'ETL', 56),
+  ('skill', 'BI', 57),
+  ('skill', 'QCD', 58),
+  ('skill', '顧客折衝', 59),
+  ('skill', 'PL', 60),
+  ('skill', 'PM', 61),
+  ('skill', 'サプライチェーン', 62),
+  ('skill', '物流', 63),
+  ('skill', '調達', 64),
+  ('skill', '生産計画', 65),
+  ('skill', '在庫', 66),
+  ('skill', '品質管理', 67),
+  ('certification', 'PMP', 1),
+  ('certification', 'IPA', 2),
+  ('certification', 'プロジェクトマネージャ', 3),
+  ('certification', 'システムアーキテクト', 4),
+  ('certification', 'データベース', 5),
+  ('certification', 'ネットワーク', 6),
+  ('certification', '情報処理安全確保支援士', 7),
+  ('certification', 'ASCM', 8),
+  ('certification', 'CPIM', 9),
+  ('certification', 'CSCP', 10),
+  ('certification', 'CLTD', 11),
+  ('certification', 'SAP S/4HANA', 12),
+  ('certification', 'Oracle Cloud SCM', 13),
+  ('certification', 'Kinaxis Maestro', 14),
+  ('certification', 'Anaplan', 15),
+  ('certification', 'mcframe', 16),
+  ('certification', '応用情報技術者', 17),
+  ('certification', '基本情報技術者', 18),
+  ('certification', 'AWS Certified Solutions Architect', 19),
+  ('certification', 'AWS Certified Developer', 20),
+  ('certification', 'AWS Certified SysOps Administrator', 21),
+  ('certification', 'Azure Administrator', 22),
+  ('certification', 'Azure Solutions Architect', 23),
+  ('certification', 'Google Cloud Professional Cloud Architect', 24)
+ON CONFLICT (dictionary_type, term) DO UPDATE
+SET sort_order = EXCLUDED.sort_order,
+    updated_at = NOW();
+
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON companies TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON jobs TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE ON skills TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON skills TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON job_skills TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dictionary_terms TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON company_parser_configs TO anon, authenticated;
@@ -161,6 +258,7 @@ DROP POLICY IF EXISTS "allow anon delete jobs" ON jobs;
 DROP POLICY IF EXISTS "allow anon read skills" ON skills;
 DROP POLICY IF EXISTS "allow anon write skills" ON skills;
 DROP POLICY IF EXISTS "allow anon update skills" ON skills;
+DROP POLICY IF EXISTS "allow anon delete skills" ON skills;
 DROP POLICY IF EXISTS "allow anon read job_skills" ON job_skills;
 DROP POLICY IF EXISTS "allow anon write job_skills" ON job_skills;
 DROP POLICY IF EXISTS "allow anon update job_skills" ON job_skills;
@@ -215,6 +313,10 @@ CREATE POLICY "allow anon update skills"
 ON skills FOR UPDATE TO anon, authenticated
 USING (true)
 WITH CHECK (true);
+
+CREATE POLICY "allow anon delete skills"
+ON skills FOR DELETE TO anon, authenticated
+USING (true);
 
 CREATE POLICY "allow anon read job_skills"
 ON job_skills FOR SELECT TO anon, authenticated

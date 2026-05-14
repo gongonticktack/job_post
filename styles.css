@@ -493,6 +493,23 @@ select {
   overflow-wrap: anywhere;
 }
 
+.certification-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.certification-tags span {
+  padding: 5px 8px;
+  border: 1px solid rgba(81, 167, 255, 0.26);
+  border-radius: 999px;
+  background: rgba(81, 167, 255, 0.1);
+  color: #cfe7ff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .source {
   color: var(--accent-strong);
   font-weight: 800;

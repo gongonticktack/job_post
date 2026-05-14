@@ -389,10 +389,12 @@ async function deleteJob(job) {
 
   try {
     if (state.supabase && job.id) {
+      const relatedSkillIds = await getSupabaseJobSkillIds(job.id);
       await supabaseRequest(`jobs?id=eq.${encodeURIComponent(job.id)}`, {
         method: "DELETE",
         headers: { prefer: "return=minimal" }
       });
+      await deleteOrphanSupabaseSkills(relatedSkillIds);
     } else if (job.sourceUrl) {
       await deleteLocalJob(job.sourceUrl);
     } else {
@@ -403,6 +405,23 @@ async function deleteJob(job) {
     await refresh();
   } catch (error) {
     setSettingsJobStatus(`削除に失敗しました: ${error.message}`);
+  }
+}
+
+async function getSupabaseJobSkillIds(jobId) {
+  const rows = await supabaseRequest(`job_skills?select=skill_id&job_id=eq.${encodeURIComponent(jobId)}`);
+  return [...new Set(rows.map((row) => row.skill_id).filter((id) => id !== null && id !== undefined))];
+}
+
+async function deleteOrphanSupabaseSkills(skillIds) {
+  for (const skillId of skillIds) {
+    const rows = await supabaseRequest(`job_skills?select=job_id&skill_id=eq.${encodeURIComponent(skillId)}&limit=1`);
+    if (!rows.length) {
+      await supabaseRequest(`skills?id=eq.${encodeURIComponent(skillId)}`, {
+        method: "DELETE",
+        headers: { prefer: "return=minimal" }
+      });
+    }
   }
 }
 
@@ -544,11 +563,34 @@ function renderJobList(container, jobs) {
     renderJobMeta(card.querySelector(".job-meta"), job);
     card.querySelector(".required").textContent = (job.requiredSkills || []).join(", ") || "-";
     card.querySelector(".preferred").textContent = (job.preferredSkills || []).join(", ") || "-";
+    renderCertificationTags(card.querySelector(".certifications"), getJobCertifications(job));
     card.querySelector(".notes").textContent = job.notes || "";
     const source = card.querySelector(".source");
     source.href = job.sourceUrl || "#";
     source.hidden = !job.sourceUrl;
     container.appendChild(card);
+  });
+}
+
+function getJobCertifications(job) {
+  return [...new Set([
+    ...extractCertificationsFromText(job.requiredCertifications || ""),
+    ...extractCertificationsFromText(job.preferredCertifications || ""),
+    ...extractCertificationsFromText(job.notes || "")
+  ].map(normalizeSkill).filter(Boolean))];
+}
+
+function renderCertificationTags(container, certifications) {
+  container.innerHTML = "";
+  container.classList.toggle("certification-tags", certifications.length > 0);
+  if (!certifications.length) {
+    container.textContent = "-";
+    return;
+  }
+  certifications.forEach((certification) => {
+    const tag = document.createElement("span");
+    tag.textContent = certification;
+    container.appendChild(tag);
   });
 }
 
@@ -598,11 +640,7 @@ function countSkills(jobs, key) {
 
 function countCertifications(jobs) {
   const map = new Map();
-  jobs.flatMap((job) => [
-    ...extractCertificationsFromText(job.requiredCertifications || ""),
-    ...extractCertificationsFromText(job.preferredCertifications || ""),
-    ...extractCertificationsFromText(job.notes || "")
-  ]).forEach((certification) => {
+  jobs.flatMap(getJobCertifications).forEach((certification) => {
     const normalized = normalizeSkill(certification);
     if (!normalized) return;
     map.set(normalized, (map.get(normalized) || 0) + 1);
