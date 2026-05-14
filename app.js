@@ -38,7 +38,6 @@ const els = {
   manualStatus: document.querySelector("#manualStatus"),
   manualPreview: document.querySelector("#manualPreview"),
   manualEditor: document.querySelector("#manualEditor"),
-  parseSampleButton: document.querySelector("#parseSampleButton"),
   dictionaryForm: document.querySelector("#dictionaryForm"),
   skillDictionaryInput: document.querySelector("#skillDictionaryInput"),
   certificationDictionaryInput: document.querySelector("#certificationDictionaryInput"),
@@ -82,7 +81,6 @@ function bindEvents() {
   els.manualCompanySelect.addEventListener("change", () => syncCompanySelect(els.manualCompanySelect, els.manualCompanyName));
   els.crawlForm.addEventListener("submit", handleCrawl);
   els.manualForm.addEventListener("submit", handleManualPreview);
-  els.parseSampleButton.addEventListener("click", handleManualPreview);
   els.dictionaryForm.addEventListener("submit", handleDictionarySave);
   els.resetDictionaryButton.addEventListener("click", resetDictionarySettings);
   els.cleanupDataButton.addEventListener("click", cleanupSavedData);
@@ -916,13 +914,7 @@ function parseManualJobText(text, fallbackCompany) {
   const annualIncomeRaw = pickSection(normalized, headings.income, parser) || findIncomeText(normalized);
   const income = parseIncome(annualIncomeRaw);
   const location = pickSection(normalized, headings.location, parser);
-  const notes = [
-    referenceInfo && `参考情報: ${referenceInfo}`,
-    requiredLanguage && `必要語学: ${requiredLanguage}`,
-    requiredCertifications && `必要資格: ${requiredCertifications}`,
-    preferredLanguage && `歓迎語学: ${preferredLanguage}`,
-    preferredCertifications && `歓迎資格: ${preferredCertifications}`
-  ].filter(Boolean).join("\n");
+  const notes = referenceInfo || "";
 
   return {
     company,
@@ -966,7 +958,7 @@ function renderManualEditor(job) {
     <label>必要資格<textarea data-field="requiredCertifications" rows="3"></textarea></label>
     <label>歓迎資格<textarea data-field="preferredCertifications" rows="3"></textarea></label>
     <label>アピールポイント<textarea data-field="appealPoints" rows="5"></textarea></label>
-    <label>補足・資格・語学<textarea data-field="notes" rows="5"></textarea></label>
+    <label>補足<textarea data-field="notes" rows="5"></textarea></label>
   `;
   setEditorValue("company", job.company);
   setEditorValue("title", job.title);
@@ -1037,7 +1029,9 @@ function getCompanyParser(company) {
 function pickManualTitle(text, parser) {
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
   const pattern = getTitlePattern(parser);
-  const titleLine = lines.find((line) => pattern.test(line)) || lines[0] || "";
+  const matches = lines.filter((line) => pattern.test(line));
+  const matchIndex = Number.isInteger(parser.titleMatchIndex) ? parser.titleMatchIndex : 0;
+  const titleLine = matches[matchIndex] || matches[0] || lines[0] || "";
   return titleLine.replace(/<\d+>\s*$/, "").trim();
 }
 
@@ -1091,6 +1085,7 @@ function extractSkillsFromText(raw, parser = getCompanyParser()) {
 function isSkillLikeText(item, ignorePattern) {
   if (!item || item.length < 2 || item.length > 24) return false;
   if (ignorePattern.test(item)) return false;
+  if (item.includes("の")) return false;
   if (/[（）()]/.test(item)) return false;
   if (/(方|こと|もの|いずれか|下記|要件|満たす|お持ち|興味|ある|経験がある|経験をお持ち|活用したこと|業界|会社|領域向け)$/.test(item)) return false;
   if (/(に関する|について|として|もしくは|または|等において|どこかの|若手の方)/.test(item)) return false;

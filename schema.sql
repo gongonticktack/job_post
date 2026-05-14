@@ -105,6 +105,7 @@ VALUES (
   'NTT DATA',
   '{
     "titlePattern": "^【.+?】",
+    "titleMatchIndex": 1,
     "headings": {
       "company": ["募集元"],
       "description": ["職務内容"],

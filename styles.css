@@ -26,6 +26,7 @@
 body {
   margin: 0;
   min-height: 100vh;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 12% -8%, rgba(37, 214, 162, 0.2), transparent 30%),
     radial-gradient(circle at 88% 6%, rgba(81, 167, 255, 0.18), transparent 28%),
@@ -52,8 +53,8 @@ body::before {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  min-height: 128px;
-  padding: 26px clamp(18px, 4vw, 52px) 22px;
+  min-height: 112px;
+  padding: 24px clamp(16px, 4vw, 52px) 20px;
   background: rgba(8, 11, 16, 0.72);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(18px);
@@ -70,7 +71,7 @@ h1 {
   margin-bottom: 0;
   color: #ffffff;
   font-family: "Great Vibes", "Brush Script MT", cursive;
-  font-size: clamp(76px, 8vw, 118px);
+  font-size: clamp(58px, 6.8vw, 92px);
   font-weight: 400;
   line-height: 0.82;
   text-shadow:
@@ -149,7 +150,7 @@ select {
 }
 
 .tab {
-  min-width: 104px;
+  min-width: 96px;
   border: 0;
   border-radius: 6px;
   padding: 10px 16px;
@@ -229,7 +230,7 @@ select {
 
 .dashboard-layout {
   display: grid;
-  grid-template-columns: minmax(300px, 0.78fr) minmax(560px, 1.52fr);
+  grid-template-columns: minmax(280px, 0.78fr) minmax(0, 1.52fr);
   gap: 18px;
 }
 
@@ -536,7 +537,7 @@ label {
 
 .form-row {
   display: grid;
-  grid-template-columns: 1fr 180px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
 }
 
@@ -683,6 +684,92 @@ label {
 
   .search-box,
   select {
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-header {
+    gap: 16px;
+    min-height: 0;
+    padding: 18px 12px 14px;
+  }
+
+  h1 {
+    font-size: clamp(48px, 18vw, 64px);
+  }
+
+  .brand {
+    gap: 6px;
+  }
+
+  .brand p {
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  main {
+    width: calc(100% - 20px);
+    margin: 18px auto 36px;
+  }
+
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tab {
+    min-width: 0;
+    padding: 9px 6px;
+    font-size: 12px;
+  }
+
+  .metric {
+    min-height: 92px;
+    padding: 14px;
+  }
+
+  .metric span {
+    margin-bottom: 10px;
+  }
+
+  .metric strong {
+    font-size: 28px;
+  }
+
+  .panel,
+  .job-card {
+    padding: 14px;
+  }
+
+  .skill-chart.word-cloud {
+    min-height: 180px;
+    gap: 8px;
+  }
+
+  .certification-cloud.word-cloud {
+    min-height: 104px;
+  }
+
+  .cloud-word {
+    min-height: 32px;
+    padding: 6px 9px;
+    font-size: min(var(--size), 24px);
+  }
+
+  .income {
+    width: fit-content;
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  textarea {
+    min-height: 220px;
+  }
+
+  .primary-button,
+  .ghost-button,
+  .danger-button {
     width: 100%;
   }
 }
