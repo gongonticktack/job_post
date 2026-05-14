@@ -3,18 +3,22 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>求人スキル分析</title>
+    <title>Talent Market Intelligence</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <header class="app-header">
       <div>
         <p class="eyebrow">Job Post Analytics</p>
-        <h1>求人情報とスキル傾向</h1>
+        <h1>Talent Market Intelligence</h1>
       </div>
       <nav class="tabs" aria-label="ページ切り替え">
         <button class="tab is-active" data-view="dashboard">TOP</button>
         <button class="tab" data-view="crawler">クローリング</button>
+        <button class="tab" data-view="manual">直接入力</button>
       </nav>
     </header>
 
@@ -77,6 +81,13 @@
             </label>
             <div class="form-row">
               <label>
+                企業名選択
+                <select id="crawlCompanySelect">
+                  <option value="NTT DATA">NTT DATA</option>
+                  <option value="custom">直接入力</option>
+                </select>
+              </label>
+              <label>
                 企業名
                 <input id="companyName" type="text" value="NTT DATA" required>
               </label>
@@ -96,6 +107,44 @@
           <div id="crawlPreview" class="job-list empty">取得した求人がここに表示されます</div>
         </section>
       </section>
+
+      <section id="manual" class="view">
+        <section class="panel crawler-panel">
+          <div class="panel-head">
+            <h2>求人票を貼り付け</h2>
+            <button id="parseSampleButton" class="ghost-button" type="button">入力を解析</button>
+          </div>
+
+          <form id="manualForm" class="crawl-form">
+            <div class="form-row">
+              <label>
+                企業名選択
+                <select id="manualCompanySelect">
+                  <option value="NTT DATA">NTT DATA</option>
+                  <option value="custom">直接入力</option>
+                </select>
+              </label>
+              <label>
+                企業名
+                <input id="manualCompanyName" type="text" value="NTT DATA" required>
+              </label>
+            </div>
+            <label>
+              求人票テキスト
+              <textarea id="manualText" rows="18" placeholder="求人票を丸ごと貼り付けてください" required></textarea>
+            </label>
+            <button class="primary-button" type="submit">解析してプレビュー</button>
+          </form>
+
+          <div id="manualStatus" class="status">求人票を貼り付けると、職務内容・年収・必須/歓迎スキルなどを抽出します。</div>
+        </section>
+
+        <section class="panel">
+          <h2>解析結果プレビュー</h2>
+          <div id="manualPreview" class="job-list empty">解析した求人がここに表示されます</div>
+          <div id="manualEditor" class="manual-editor" hidden></div>
+        </section>
+      </section>
     </main>
 
     <template id="jobCardTemplate">
@@ -108,6 +157,7 @@
           <span class="income"></span>
         </div>
         <p class="description"></p>
+        <div class="job-meta"></div>
         <dl class="skill-block">
           <div>
             <dt>必須</dt>
@@ -123,6 +173,7 @@
       </article>
     </template>
 
+    <script src="company-parsers.js"></script>
     <script src="crawler.js"></script>
     <script src="app.js"></script>
   </body>

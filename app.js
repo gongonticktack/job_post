@@ -15,6 +15,8 @@ const sampleJobs = [
     requiredSkills: ["SQL", "Python", "クラウド", "データ基盤"],
     preferredSkills: ["AWS", "生成AI", "プロジェクトマネジメント"],
     notes: "サンプルデータです。Supabase接続前の表示確認にも使えます。",
+    location: "東京都",
+    inputMethod: "sample",
     sourceUrl: "https://nttdata-career.jposting.net/joblist/sample-1",
     crawledAt: new Date().toISOString()
   },
@@ -28,6 +30,8 @@ const sampleJobs = [
     requiredSkills: ["Java", "要件定義", "SQL", "チームリード"],
     preferredSkills: ["Spring", "クラウド", "アジャイル"],
     notes: "サンプルデータです。",
+    location: "東京都",
+    inputMethod: "sample",
     sourceUrl: "https://nttdata-career.jposting.net/joblist/sample-2",
     crawledAt: new Date().toISOString()
   }
@@ -36,7 +40,8 @@ const sampleJobs = [
 const state = {
   jobs: [],
   db: null,
-  supabase: null
+  supabase: null,
+  manualDraft: null
 };
 
 const els = {
@@ -51,11 +56,20 @@ const els = {
   searchInput: document.querySelector("#searchInput"),
   jobList: document.querySelector("#jobList"),
   crawlForm: document.querySelector("#crawlForm"),
+  crawlCompanySelect: document.querySelector("#crawlCompanySelect"),
   crawlUrl: document.querySelector("#crawlUrl"),
   companyName: document.querySelector("#companyName"),
   crawlLimit: document.querySelector("#crawlLimit"),
   crawlStatus: document.querySelector("#crawlStatus"),
   crawlPreview: document.querySelector("#crawlPreview"),
+  manualForm: document.querySelector("#manualForm"),
+  manualCompanySelect: document.querySelector("#manualCompanySelect"),
+  manualCompanyName: document.querySelector("#manualCompanyName"),
+  manualText: document.querySelector("#manualText"),
+  manualStatus: document.querySelector("#manualStatus"),
+  manualPreview: document.querySelector("#manualPreview"),
+  manualEditor: document.querySelector("#manualEditor"),
+  parseSampleButton: document.querySelector("#parseSampleButton"),
   seedButton: document.querySelector("#seedButton"),
   template: document.querySelector("#jobCardTemplate")
 };
@@ -75,12 +89,16 @@ function bindEvents() {
   });
   els.skillTypeFilter.addEventListener("change", render);
   els.searchInput.addEventListener("input", render);
+  els.crawlCompanySelect.addEventListener("change", () => syncCompanySelect(els.crawlCompanySelect, els.companyName));
+  els.manualCompanySelect.addEventListener("change", () => syncCompanySelect(els.manualCompanySelect, els.manualCompanyName));
   els.seedButton.addEventListener("click", async () => {
     await saveJobs(sampleJobs);
     setStatus("サンプル求人を保存しました。TOPでスキル傾向を確認できます。");
     await refresh();
   });
   els.crawlForm.addEventListener("submit", handleCrawl);
+  els.manualForm.addEventListener("submit", handleManualPreview);
+  els.parseSampleButton.addEventListener("click", handleManualPreview);
 }
 
 async function refresh() {
@@ -204,7 +222,15 @@ function toClientJob(row) {
     annualIncomeRaw: row.annual_income_raw || "",
     requiredSkills: row.required_skills || [],
     preferredSkills: row.preferred_skills || [],
+    appealPoints: row.appeal_points || "",
+    referenceInfo: row.reference_info || "",
+    requiredLanguage: row.required_language || "",
+    requiredCertifications: row.required_certifications || "",
+    preferredLanguage: row.preferred_language || "",
+    preferredCertifications: row.preferred_certifications || "",
+    location: row.location || "",
     notes: row.notes || "",
+    inputMethod: row.input_method || "",
     sourceUrl: row.source_url || "",
     crawledAt: row.crawled_at
   };
@@ -220,7 +246,15 @@ function toDbJob(job, companyId) {
     annual_income_raw: job.annualIncomeRaw || "",
     required_skills: Array.isArray(job.requiredSkills) ? job.requiredSkills : [],
     preferred_skills: Array.isArray(job.preferredSkills) ? job.preferredSkills : [],
+    appeal_points: job.appealPoints || "",
+    reference_info: job.referenceInfo || "",
+    required_language: job.requiredLanguage || "",
+    required_certifications: job.requiredCertifications || "",
+    preferred_language: job.preferredLanguage || "",
+    preferred_certifications: job.preferredCertifications || "",
+    location: job.location || "",
     notes: job.notes || "",
+    input_method: job.inputMethod || "crawl",
     source_url: job.sourceUrl,
     crawled_at: job.crawledAt || new Date().toISOString()
   };
@@ -266,9 +300,30 @@ function switchView(viewId) {
 }
 
 function render() {
+  updateCompanyOptions();
   renderMetrics();
   renderSkillChart();
   renderJobList(els.jobList, filterJobs(state.jobs));
+}
+
+function updateCompanyOptions() {
+  const companies = [...new Set(["NTT DATA", ...state.jobs.map((job) => job.company).filter(Boolean)])]
+    .sort((a, b) => a.localeCompare(b, "ja"));
+  [els.crawlCompanySelect, els.manualCompanySelect].forEach((select) => {
+    const current = select.value;
+    select.innerHTML = "";
+    companies.forEach((company) => {
+      const option = document.createElement("option");
+      option.value = company;
+      option.textContent = company;
+      select.appendChild(option);
+    });
+    const custom = document.createElement("option");
+    custom.value = "custom";
+    custom.textContent = "直接入力";
+    select.appendChild(custom);
+    select.value = companies.includes(current) || current === "custom" ? current : companies[0];
+  });
 }
 
 function renderMetrics() {
@@ -290,23 +345,32 @@ function renderSkillChart() {
   const counts = countSkills(state.jobs, key);
   els.skillChart.innerHTML = "";
   els.skillChart.classList.toggle("empty", counts.length === 0);
+  els.skillChart.classList.toggle("word-cloud", counts.length > 0);
   if (!counts.length) {
     els.skillChart.textContent = "データがありません";
     return;
   }
 
   const max = counts[0].count;
-  counts.slice(0, 12).forEach(({ name, count }) => {
-    const row = document.createElement("div");
-    row.className = "skill-row";
-    row.innerHTML = `
-      <span class="skill-name"></span>
-      <span class="skill-bar"><span style="width: ${Math.max(8, (count / max) * 100)}%"></span></span>
-      <span class="skill-count"></span>
-    `;
-    row.querySelector(".skill-name").textContent = name;
-    row.querySelector(".skill-count").textContent = count;
-    els.skillChart.appendChild(row);
+  const min = counts[counts.length - 1].count;
+  counts.slice(0, 36).forEach(({ name, count }, index) => {
+    const weight = max === min ? 1 : (count - min) / (max - min);
+    const item = document.createElement("button");
+    item.className = "cloud-word";
+    item.type = "button";
+    item.style.setProperty("--size", `${14 + weight * 20}px`);
+    item.style.setProperty("--alpha", `${0.55 + weight * 0.45}`);
+    item.style.setProperty("--delay", `${index * 16}ms`);
+    item.title = `${name}: ${count}件`;
+    item.textContent = name;
+    item.addEventListener("click", () => {
+      els.searchInput.value = name;
+      render();
+    });
+    const badge = document.createElement("span");
+    badge.textContent = count;
+    item.appendChild(badge);
+    els.skillChart.appendChild(item);
   });
 }
 
@@ -326,6 +390,7 @@ function renderJobList(container, jobs) {
     card.querySelector(".company").textContent = job.company || "企業名未設定";
     card.querySelector(".income").textContent = job.annualIncomeRaw || "年収未取得";
     card.querySelector(".description").textContent = job.description || "業務内容未取得";
+    renderJobMeta(card.querySelector(".job-meta"), job);
     card.querySelector(".required").textContent = (job.requiredSkills || []).join(", ") || "-";
     card.querySelector(".preferred").textContent = (job.preferredSkills || []).join(", ") || "-";
     card.querySelector(".notes").textContent = job.notes || "";
@@ -333,6 +398,20 @@ function renderJobList(container, jobs) {
     source.href = job.sourceUrl || "#";
     source.hidden = !job.sourceUrl;
     container.appendChild(card);
+  });
+}
+
+function renderJobMeta(container, job) {
+  const items = [
+    ["勤務地", job.location],
+    ["英語", job.preferredLanguage || job.requiredLanguage]
+  ].filter(([, value]) => value);
+  container.innerHTML = "";
+  container.hidden = items.length === 0;
+  items.forEach(([label, value]) => {
+    const item = document.createElement("span");
+    item.textContent = `${label}: ${value}`;
+    container.appendChild(item);
   });
 }
 
@@ -344,6 +423,8 @@ function filterJobs(jobs) {
     job.title,
     job.description,
     job.annualIncomeRaw,
+    job.appealPoints,
+    job.location,
     ...(job.requiredSkills || []),
     ...(job.preferredSkills || []),
     job.notes
@@ -386,11 +467,223 @@ async function handleCrawl(event) {
   }
 }
 
+async function handleManualPreview(event) {
+  event?.preventDefault();
+  const text = els.manualText.value.trim();
+  if (!text) {
+    setInputStatus("求人票テキストを貼り付けてください。");
+    return;
+  }
+  const job = parseManualJobText(text, els.manualCompanyName.value.trim());
+  state.manualDraft = job;
+  renderJobList(els.manualPreview, [job]);
+  renderManualEditor(job);
+  setInputStatus("解析しました。必要に応じて編集してから保存してください。");
+}
+
+async function saveManualDraft() {
+  if (!state.manualDraft) {
+    setInputStatus("先に求人票を解析してください。");
+    return;
+  }
+  try {
+    const job = readManualEditorJob();
+    await saveJobs([job]);
+    state.manualDraft = job;
+    renderJobList(els.manualPreview, [job]);
+    setInputStatus("求人票を解析してDBに保存しました。TOPページに反映済みです。");
+    await refresh();
+  } catch (error) {
+    setInputStatus(`保存に失敗しました: ${error.message}`);
+  }
+}
+
 async function crawlJobs(listUrl, company, limit) {
   if (!window.crawlJobsBrowser) {
     throw new Error("crawler.js が読み込まれていません。index.html と同じ階層に crawler.js を配置してください。");
   }
   return window.crawlJobsBrowser(listUrl, company, limit, setStatus);
+}
+
+function syncCompanySelect(select, input) {
+  if (select.value !== "custom") input.value = select.value;
+  input.focus();
+}
+
+function parseManualJobText(text, fallbackCompany) {
+  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  const parser = getCompanyParser(fallbackCompany);
+  const headings = parser.headings || {};
+  const company = pickSection(normalized, headings.company, parser) || fallbackCompany || "未設定";
+  const title = pickManualTitle(normalized, parser);
+  const description = pickSection(normalized, headings.description, parser) || "";
+  const appealPoints = pickSection(normalized, headings.appealPoints, parser) || "";
+  const referenceInfo = pickSection(normalized, headings.referenceInfo, parser) || "";
+  const requiredSkillsRaw = pickSection(normalized, headings.requiredSkills, parser);
+  const preferredSkillsRaw = pickSection(normalized, headings.preferredSkills, parser);
+  const requiredLanguage = pickSection(normalized, headings.requiredLanguage, parser);
+  const requiredCertifications = pickSection(normalized, headings.requiredCertifications, parser);
+  const preferredLanguage = pickSection(normalized, headings.preferredLanguage, parser);
+  const preferredCertifications = pickSection(normalized, headings.preferredCertifications, parser);
+  const annualIncomeRaw = pickSection(normalized, headings.income, parser) || findIncomeText(normalized);
+  const income = parseIncome(annualIncomeRaw);
+  const location = pickSection(normalized, headings.location, parser);
+  const notes = [
+    referenceInfo && `参考情報: ${referenceInfo}`,
+    requiredLanguage && `必要語学: ${requiredLanguage}`,
+    requiredCertifications && `必要資格: ${requiredCertifications}`,
+    preferredLanguage && `歓迎語学: ${preferredLanguage}`,
+    preferredCertifications && `歓迎資格: ${preferredCertifications}`
+  ].filter(Boolean).join("\n");
+
+  return {
+    company,
+    title,
+    description,
+    annualIncomeRaw,
+    annualIncomeMin: income.min,
+    annualIncomeMax: income.max,
+    requiredSkills: extractSkillsFromText(requiredSkillsRaw || description, parser),
+    preferredSkills: extractSkillsFromText([preferredSkillsRaw, preferredCertifications].filter(Boolean).join("\n"), parser),
+    appealPoints,
+    referenceInfo,
+    requiredLanguage,
+    requiredCertifications,
+    preferredLanguage,
+    preferredCertifications,
+    location,
+    notes,
+    inputMethod: "manual",
+    sourceUrl: `manual:${hashText(`${company}\n${title}\n${normalized.slice(0, 200)}`)}`,
+    crawledAt: new Date().toISOString()
+  };
+}
+
+function renderManualEditor(job) {
+  els.manualEditor.hidden = false;
+  els.manualEditor.innerHTML = `
+    <div class="panel-head editor-head">
+      <h2>保存前編集</h2>
+      <button class="primary-button" id="manualSaveButton" type="button">この内容で保存</button>
+    </div>
+    <div class="editor-grid">
+      <label>企業名<input data-field="company" type="text"></label>
+      <label>求人タイトル<input data-field="title" type="text"></label>
+      <label>年収<input data-field="annualIncomeRaw" type="text"></label>
+      <label>勤務地<input data-field="location" type="text"></label>
+    </div>
+    <label>職務内容<textarea data-field="description" rows="5"></textarea></label>
+    <label>必須スキル<textarea data-field="requiredSkills" rows="4"></textarea></label>
+    <label>歓迎スキル<textarea data-field="preferredSkills" rows="4"></textarea></label>
+    <label>アピールポイント<textarea data-field="appealPoints" rows="5"></textarea></label>
+    <label>補足・資格・語学<textarea data-field="notes" rows="5"></textarea></label>
+  `;
+  setEditorValue("company", job.company);
+  setEditorValue("title", job.title);
+  setEditorValue("annualIncomeRaw", job.annualIncomeRaw);
+  setEditorValue("location", job.location);
+  setEditorValue("description", job.description);
+  setEditorValue("requiredSkills", (job.requiredSkills || []).join("\n"));
+  setEditorValue("preferredSkills", (job.preferredSkills || []).join("\n"));
+  setEditorValue("appealPoints", job.appealPoints);
+  setEditorValue("notes", job.notes);
+  els.manualEditor.querySelector("#manualSaveButton").addEventListener("click", saveManualDraft);
+}
+
+function setEditorValue(field, value) {
+  const input = els.manualEditor.querySelector(`[data-field="${field}"]`);
+  if (input) input.value = value || "";
+}
+
+function readManualEditorJob() {
+  const get = (field) => els.manualEditor.querySelector(`[data-field="${field}"]`)?.value.trim() || "";
+  const annualIncomeRaw = get("annualIncomeRaw");
+  const income = parseIncome(annualIncomeRaw);
+  const job = {
+    ...state.manualDraft,
+    company: get("company") || "未設定",
+    title: get("title"),
+    description: get("description"),
+    annualIncomeRaw,
+    annualIncomeMin: income.min,
+    annualIncomeMax: income.max,
+    location: get("location"),
+    requiredSkills: splitEditorList(get("requiredSkills")),
+    preferredSkills: splitEditorList(get("preferredSkills")),
+    appealPoints: get("appealPoints"),
+    notes: get("notes"),
+    inputMethod: "manual"
+  };
+  job.sourceUrl = `manual:${hashText(`${job.company}\n${job.title}\n${job.description.slice(0, 120)}`)}`;
+  return job;
+}
+
+function splitEditorList(value) {
+  return [...new Set(value.split(/\n|,|、/).map(normalizeSkill).filter(Boolean))];
+}
+
+function getCompanyParser(company) {
+  const config = window.JobParserConfig || {};
+  return config.companies?.[company] || config.companies?.[config.defaultCompany] || {
+    headings: {},
+    sectionHeadings: [],
+    ignoreSkillPatterns: []
+  };
+}
+
+function pickManualTitle(text, parser) {
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+  const pattern = parser.titlePattern || /^【.+?】/;
+  const titleLine = lines.find((line) => pattern.test(line)) || lines[0] || "";
+  return titleLine.replace(/<\d+>\s*$/, "").trim();
+}
+
+function pickSection(text, labels = [], parser = getCompanyParser()) {
+  const lines = text.split("\n");
+  const headings = parser.sectionHeadings || [];
+  const start = lines.findIndex((line) => labels.some((label) => line.trim() === label || line.includes(label)));
+  if (start < 0) return "";
+  const values = [];
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (line && headings.some((heading) => line === heading || line.includes(heading))) break;
+    values.push(lines[i]);
+  }
+  return cleanText(values.join("\n"));
+}
+
+function findIncomeText(text) {
+  const match = text.match(/(?:年収|給与|想定年収|待遇).{0,80}?(\d{3,4}).{0,20}?万円?(?:.{0,20}?(\d{3,4}).{0,20}?万円?)?/);
+  return match ? match[0] : "";
+}
+
+function parseIncome(raw) {
+  const values = (raw.match(/\d{3,4}/g) || []).map(Number);
+  return {
+    min: values.length ? Math.min(...values) : null,
+    max: values.length ? Math.max(...values) : null
+  };
+}
+
+function extractSkillsFromText(raw, parser = getCompanyParser()) {
+  if (!raw) return [];
+  const known = window.JobParserConfig?.skillDictionary || [];
+  const ignorePattern = new RegExp(parser.ignoreSkillPatterns?.join("|") || "$^");
+  const found = known.filter((skill) => new RegExp(escapeRegExp(skill), "i").test(raw));
+  const bulletItems = raw
+    .split(/\n|・|●|■|,|、|;/)
+    .map((item) => cleanText(item).replace(/^[\-\u30fb\s]+/, ""))
+    .filter((item) => item.length >= 2 && item.length <= 42)
+    .filter((item) => !ignorePattern.test(item));
+  return [...new Set([...found, ...bulletItems].map(normalizeSkill).filter(Boolean))].slice(0, 24);
+}
+
+function hashText(text) {
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36);
 }
 
 function normalizeSkill(skill) {
@@ -401,6 +694,14 @@ function cleanText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function setStatus(message) {
   els.crawlStatus.textContent = message;
+}
+
+function setInputStatus(message) {
+  els.manualStatus.textContent = message;
 }
