@@ -4,6 +4,7 @@ window.JobParserConfig = {
   defaultCompany: "NTT DATA",
   companies: {
     "NTT DATA": {
+      aliases: ["株式会社NTTデータ", "NTTData", "NTT Data"],
       titlePattern: "^【.+?】",
       titleMatchIndex: 1,
       headings: {
@@ -31,6 +32,7 @@ window.JobParserConfig = {
       ]
     },
     "富士通株式会社": {
+      aliases: ["富士通 株式会社"],
       titlePattern: ".+",
       titleMatchIndex: 0,
       headings: {
@@ -64,6 +66,7 @@ window.JobParserConfig = {
       ]
     },
     "株式会社トヨタシステムズ": {
+      aliases: ["トヨタシステムズ", "株式会社 トヨタシステムズ"],
       titlePattern: ".+",
       titleMatchIndex: 0,
       headings: {
@@ -107,7 +110,24 @@ window.JobParserConfig = {
     "車両性能シミュレーション", "モデルベース開発", "エンジニアリングシステム",
     "オンプレミス", "仕様定義", "上流工程", "ベンダーコントロール",
     "アプリケーション開発", "詳細設計", "テスト", "システム開発", "運用サポート",
-    "開発環境", "情報管理システム", "Teamcenter", "integrity", "MATLAB", "Simulink", "TargetLink"
+    "開発環境", "情報管理システム", "Teamcenter", "integrity", "MATLAB", "Simulink", "TargetLink",
+    "Node.js", "Next.js", "Nuxt", "Express", "NestJS", "Django", "Flask", "FastAPI",
+    "Laravel", "Rails", "Spring Boot", ".NET", "ASP.NET", "Unity", "Unreal Engine",
+    "Swift", "Kotlin", "Scala", "Rust", "R", "VBA", "Shell", "Bash", "PowerShell",
+    "HTML", "CSS", "Sass", "Tailwind CSS", "GraphQL", "REST API", "gRPC", "Web API",
+    "PostgreSQL", "MySQL", "Oracle", "SQL Server", "MongoDB", "Redis", "Elasticsearch",
+    "DynamoDB", "BigQuery", "Snowflake", "Redshift", "Databricks",
+    "Terraform", "Ansible", "Jenkins", "GitHub Actions", "CI/CD", "DevOps", "SRE",
+    "Prometheus", "Grafana", "Datadog", "New Relic", "Splunk", "MLOps", "LLM", "RAG",
+    "Kaggle", "Tableau", "Power BI", "Looker", "dbt", "DWH", "データマート",
+    "マイクロサービス", "API設計", "基本設計", "外部設計", "内部設計", "単体テスト",
+    "結合テスト", "総合テスト", "UAT", "品質保証", "QA", "テスト自動化",
+    "スクラム", "ウォーターフォール", "PMO", "WBS", "課題管理", "リスク管理",
+    "進捗管理", "品質管理", "予算管理", "ベンダーマネジメント", "ピープルマネジメント",
+    "プロダクトマネジメント", "プロダクトオーナー", "PdM", "PO", "ITコンサル",
+    "業務改善", "BPR", "ITIL", "インシデント管理", "SLA", "ITSM", "ゼロトラスト",
+    "認証", "認可", "OAuth", "OIDC", "SAML", "Active Directory", "Entra ID",
+    "Windows Server", "VMware", "OpenShift", "EKS", "AKS", "Cloud Run", "Lambda"
   ],
   certificationDictionary: [
     "PMP", "IPA", "プロジェクトマネージャ", "システムアーキテクト", "データベース",
@@ -115,6 +135,17 @@ window.JobParserConfig = {
     "SAP S/4HANA", "Oracle Cloud SCM", "Kinaxis Maestro", "Anaplan", "mcframe",
     "応用情報技術者", "基本情報技術者", "AWS Certified Solutions Architect",
     "AWS Certified Developer", "AWS Certified SysOps Administrator",
-    "Azure Administrator", "Azure Solutions Architect", "Google Cloud Professional Cloud Architect"
+    "Azure Administrator", "Azure Solutions Architect", "Google Cloud Professional Cloud Architect",
+    "ITIL", "ITIL Foundation", "Certified ScrumMaster", "Certified Scrum Product Owner",
+    "Professional Scrum Master", "Professional Scrum Product Owner", "SAFe Agilist", "SAFe POPM",
+    "AWS Certified Cloud Practitioner", "AWS Certified DevOps Engineer",
+    "AWS Certified Security", "AWS Certified Machine Learning",
+    "Microsoft Certified Azure Fundamentals", "Azure Developer Associate",
+    "Azure DevOps Engineer Expert", "Azure Security Engineer Associate",
+    "Google Cloud Associate Cloud Engineer", "Google Cloud Professional Data Engineer",
+    "Google Cloud Professional Cloud Developer", "Google Cloud Professional Cloud DevOps Engineer",
+    "Oracle Certified Java Programmer", "Oracle Certified Professional",
+    "Oracle Master", "CCNA", "CCNP", "LPIC", "LinuC", "CISSP", "CISA", "CISM",
+    "CompTIA Security+", "Project Management Professional", "簿記", "簿記3級", "簿記2級"
   ]
 };

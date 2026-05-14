@@ -193,7 +193,7 @@ async function refresh() {
   }
 
   try {
-    state.jobs = await getAllLocalJobs();
+    state.jobs = (await getAllLocalJobs()).map(normalizeClientJob);
     if (!state.supabase) {
       setStatus("supabase-config.jsonを読み込めないため、ブラウザ内DBで動作しています。");
     }
@@ -204,15 +204,16 @@ async function refresh() {
 }
 
 async function saveJobs(jobs) {
+  const normalizedJobs = jobs.map(normalizeClientJob);
   if (state.supabase) {
     try {
-      await saveSupabaseJobs(jobs);
+      await saveSupabaseJobs(normalizedJobs);
       return;
     } catch (error) {
       setStatus(`Supabase保存に失敗したためローカルDBへ保存します: ${error.message}`);
     }
   }
-  await saveLocalJobs(jobs);
+  await saveLocalJobs(normalizedJobs);
 }
 
 async function loadSupabaseConfig() {
@@ -259,14 +260,15 @@ async function getSupabaseJobs() {
 async function saveSupabaseJobs(jobs) {
   for (const job of jobs) {
     if (!job.sourceUrl) continue;
+    const normalizedCompany = canonicalCompanyName(job.company || "未設定");
     const companyRows = await supabaseRequest("companies?on_conflict=name", {
       method: "POST",
-      body: JSON.stringify({ name: job.company || "未設定" }),
+      body: JSON.stringify({ name: normalizedCompany }),
       headers: { prefer: "resolution=merge-duplicates,return=representation" }
     });
     const savedJobRows = await supabaseRequest("jobs?on_conflict=source_url", {
       method: "POST",
-      body: JSON.stringify(toDbJob(job, companyRows[0].id)),
+      body: JSON.stringify(toDbJob({ ...job, company: normalizedCompany }, companyRows[0].id)),
       headers: { prefer: "resolution=merge-duplicates,return=representation" }
     });
     const savedJob = savedJobRows[0];
@@ -301,9 +303,9 @@ async function replaceSupabaseJobSkills(jobId, requiredSkills, preferredSkills) 
 }
 
 function toClientJob(row) {
-  return {
+  return normalizeClientJob({
     id: row.id,
-    company: row.companies?.name || row.company || "",
+    company: canonicalCompanyName(row.companies?.name || row.company || ""),
     title: row.title || "",
     description: row.description || "",
     annualIncomeMin: row.annual_income_min,
@@ -322,6 +324,13 @@ function toClientJob(row) {
     inputMethod: row.input_method || "",
     sourceUrl: row.source_url || "",
     crawledAt: row.crawled_at
+  });
+}
+
+function normalizeClientJob(job) {
+  return {
+    ...job,
+    company: canonicalCompanyName(job.company || "")
   };
 }
 
@@ -544,10 +553,12 @@ function render() {
 
 function updateCompanyOptions() {
   const parserCompanies = Object.keys(window.JobParserConfig?.companies || {});
-  const companies = [...new Set([...parserCompanies, ...state.jobs.map((job) => job.company).filter(Boolean), "NTT DATA"])]
+  const companies = [...new Set([...parserCompanies, ...state.jobs.map((job) => job.company).filter(Boolean), "NTT DATA"]
+    .map(canonicalCompanyName)
+    .filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "ja"));
   [els.crawlCompanySelect, els.manualCompanySelect].forEach((select) => {
-    const current = select.value;
+    const current = canonicalCompanyName(select.value);
     select.innerHTML = "";
     companies.forEach((company) => {
       const option = document.createElement("option");
@@ -566,7 +577,7 @@ function updateCompanyOptions() {
 }
 
 function renderMetrics(jobs) {
-  const companies = new Set(jobs.map((job) => job.company).filter(Boolean));
+  const companies = new Set(jobs.map((job) => normalizeCompanyKey(canonicalCompanyName(job.company))).filter(Boolean));
   const incomeValues = jobs.map(getJobAverageIncome).filter(Number.isFinite);
   const avg = incomeValues.length
     ? Math.round(incomeValues.reduce((sum, value) => sum + value, 0) / incomeValues.length)
@@ -900,7 +911,7 @@ function parseManualJobText(text, fallbackCompany) {
   const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
   const parser = getCompanyParser(fallbackCompany);
   const headings = parser.headings || {};
-  const company = pickSection(normalized, headings.company, parser) || fallbackCompany || "未設定";
+  const company = canonicalCompanyName(pickSection(normalized, headings.company, parser) || fallbackCompany || "未設定");
   const title = pickManualTitle(normalized, parser);
   const description = pickSection(normalized, headings.description, parser) || "";
   const appealPoints = pickSection(normalized, headings.appealPoints, parser) || "";
@@ -911,8 +922,9 @@ function parseManualJobText(text, fallbackCompany) {
   const requiredCertifications = pickSection(normalized, headings.requiredCertifications, parser);
   const preferredLanguage = pickSection(normalized, headings.preferredLanguage, parser);
   const preferredCertifications = pickSection(normalized, headings.preferredCertifications, parser);
-  const annualIncomeRaw = pickSection(normalized, headings.income, parser) || findIncomeText(normalized);
-  const income = parseIncome(annualIncomeRaw);
+  const annualIncomeSource = pickSection(normalized, headings.income, parser) || findIncomeText(normalized);
+  const income = parseIncome(annualIncomeSource);
+  const annualIncomeRaw = formatIncomeRaw(annualIncomeSource, income);
   const location = pickSection(normalized, headings.location, parser);
   const notes = referenceInfo || "";
 
@@ -981,11 +993,12 @@ function setEditorValue(field, value) {
 
 function readManualEditorJob() {
   const get = (field) => els.manualEditor.querySelector(`[data-field="${field}"]`)?.value.trim() || "";
-  const annualIncomeRaw = get("annualIncomeRaw");
-  const income = parseIncome(annualIncomeRaw);
+  const annualIncomeSource = get("annualIncomeRaw");
+  const income = parseIncome(annualIncomeSource);
+  const annualIncomeRaw = formatIncomeRaw(annualIncomeSource, income);
   const job = {
     ...state.manualDraft,
-    company: get("company") || "未設定",
+    company: canonicalCompanyName(get("company") || "未設定"),
     title: get("title"),
     description: get("description"),
     annualIncomeRaw,
@@ -1019,11 +1032,50 @@ function splitEditorList(value) {
 
 function getCompanyParser(company) {
   const config = window.JobParserConfig || {};
-  return config.companies?.[company] || config.companies?.[config.defaultCompany] || {
+  const canonical = canonicalCompanyName(company);
+  return config.companies?.[canonical] || config.companies?.[company] || config.companies?.[config.defaultCompany] || {
     headings: {},
     sectionHeadings: [],
     ignoreSkillPatterns: []
   };
+}
+
+function canonicalCompanyName(name) {
+  const raw = cleanCompanyName(name);
+  if (!raw) return "";
+  const companies = window.JobParserConfig?.companies || {};
+  const normalizedRaw = normalizeCompanyKey(raw);
+  for (const [canonical, parser] of Object.entries(companies)) {
+    const names = [canonical, ...(parser.aliases || [])];
+    if (names.some((candidate) => normalizeCompanyKey(candidate) === normalizedRaw)) {
+      return canonical;
+    }
+  }
+  return formatUnknownCompanyName(raw);
+}
+
+function cleanCompanyName(name) {
+  return String(name || "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .replace(/\s*(株式会社|有限会社)\s*/g, "$1")
+    .trim();
+}
+
+function normalizeCompanyKey(name) {
+  return cleanCompanyName(name)
+    .toLowerCase()
+    .replace(/[\s・._-]+/g, "")
+    .replace(/^株式会社/, "")
+    .replace(/株式会社$/, "");
+}
+
+function formatUnknownCompanyName(name) {
+  const cleaned = cleanCompanyName(name);
+  if (!/(株式会社|有限会社)/.test(cleaned)) return cleaned;
+  return cleaned
+    .replace(/\s+/g, "")
+    .replace(/japan/i, "Japan");
 }
 
 function pickManualTitle(text, parser) {
@@ -1078,8 +1130,17 @@ function parseIncome(raw) {
 }
 
 function pickIncomeTarget(raw) {
-  const lines = String(raw || "").split(/\n|。/).map((line) => line.trim()).filter(Boolean);
+  const lines = String(raw || "").split(/\n|。|■/).map((line) => line.trim()).filter(Boolean);
   return lines.find((line) => /年収|想定年収/.test(line)) || raw || "";
+}
+
+function formatIncomeRaw(raw, income) {
+  if (!Number.isFinite(income.min) && !Number.isFinite(income.max)) return cleanText(raw);
+  if (Number.isFinite(income.min) && Number.isFinite(income.max) && income.min !== income.max) {
+    return `${income.min}-${income.max}万円`;
+  }
+  const value = Number.isFinite(income.min) ? income.min : income.max;
+  return `${value}万円`;
 }
 
 function extractSkillsFromText(raw, parser = getCompanyParser()) {
