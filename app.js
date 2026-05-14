@@ -44,6 +44,7 @@ const els = {
   certificationDictionaryInput: document.querySelector("#certificationDictionaryInput"),
   dictionaryStatus: document.querySelector("#dictionaryStatus"),
   resetDictionaryButton: document.querySelector("#resetDictionaryButton"),
+  cleanupDataButton: document.querySelector("#cleanupDataButton"),
   settingsJobStatus: document.querySelector("#settingsJobStatus"),
   settingsJobList: document.querySelector("#settingsJobList"),
   template: document.querySelector("#jobCardTemplate")
@@ -84,6 +85,7 @@ function bindEvents() {
   els.parseSampleButton.addEventListener("click", handleManualPreview);
   els.dictionaryForm.addEventListener("submit", handleDictionarySave);
   els.resetDictionaryButton.addEventListener("click", resetDictionarySettings);
+  els.cleanupDataButton.addEventListener("click", cleanupSavedData);
 }
 
 async function loadDictionarySettings() {
@@ -291,6 +293,15 @@ async function saveSupabaseSkills(jobId, skills, skillType) {
   }
 }
 
+async function replaceSupabaseJobSkills(jobId, requiredSkills, preferredSkills) {
+  await supabaseRequest(`job_skills?job_id=eq.${encodeURIComponent(jobId)}`, {
+    method: "DELETE",
+    headers: { prefer: "return=minimal" }
+  });
+  await saveSupabaseSkills(jobId, requiredSkills, "required");
+  await saveSupabaseSkills(jobId, preferredSkills, "preferred");
+}
+
 function toClientJob(row) {
   return {
     id: row.id,
@@ -414,6 +425,7 @@ async function getSupabaseJobSkillIds(jobId) {
 }
 
 async function deleteOrphanSupabaseSkills(skillIds) {
+  let deletedCount = 0;
   for (const skillId of skillIds) {
     const rows = await supabaseRequest(`job_skills?select=job_id&skill_id=eq.${encodeURIComponent(skillId)}&limit=1`);
     if (!rows.length) {
@@ -421,8 +433,95 @@ async function deleteOrphanSupabaseSkills(skillIds) {
         method: "DELETE",
         headers: { prefer: "return=minimal" }
       });
+      deletedCount += 1;
     }
   }
+  return deletedCount;
+}
+
+async function cleanupSavedData() {
+  if (!window.confirm("保存済み求人のスキルを現在の抽出ルールで整理しますか？")) return;
+  setSettingsJobStatus("データを整理しています...");
+
+  try {
+    let updatedCount = 0;
+    let removedSkillCount = 0;
+
+    for (const job of state.jobs) {
+      const cleaned = cleanJobSkills(job);
+      if (!hasSkillListChanged(job.requiredSkills, cleaned.requiredSkills)
+        && !hasSkillListChanged(job.preferredSkills, cleaned.preferredSkills)) {
+        continue;
+      }
+
+      updatedCount += 1;
+      if (state.supabase && job.id) {
+        const beforeSkillIds = await getSupabaseJobSkillIds(job.id);
+        await supabaseRequest(`jobs?id=eq.${encodeURIComponent(job.id)}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            required_skills: cleaned.requiredSkills,
+            preferred_skills: cleaned.preferredSkills
+          }),
+          headers: { prefer: "return=minimal" }
+        });
+        await replaceSupabaseJobSkills(job.id, cleaned.requiredSkills, cleaned.preferredSkills);
+        removedSkillCount += await deleteOrphanSupabaseSkills(beforeSkillIds);
+      } else if (job.sourceUrl) {
+        await saveLocalJobs([{ ...job, ...cleaned }]);
+      }
+    }
+
+    if (state.supabase) {
+      removedSkillCount += await cleanupAllOrphanSupabaseSkills();
+    }
+
+    await refresh();
+    setSettingsJobStatus(`データ更新が完了しました。求人${updatedCount}件を整理し、未使用スキル${removedSkillCount}件を削除しました。`);
+  } catch (error) {
+    setSettingsJobStatus(`データ更新に失敗しました: ${error.message}`);
+  }
+}
+
+function cleanJobSkills(job) {
+  const parser = getCompanyParser(job.company);
+  const requiredSkills = cleanSkillList(job.requiredSkills || [], parser);
+  const preferredSkills = cleanSkillList(job.preferredSkills || [], parser);
+  return { requiredSkills, preferredSkills };
+}
+
+function cleanSkillList(skills, parser) {
+  const ignorePattern = new RegExp(parser.ignoreSkillPatterns?.join("|") || "$^");
+  return [...new Set(skills.map(normalizeSkill).filter((skill) => isSavedSkillValid(skill, ignorePattern)))];
+}
+
+function isSavedSkillValid(skill, ignorePattern) {
+  const dictionary = window.JobParserConfig?.skillDictionary || [];
+  const normalized = normalizeSkill(skill);
+  if (!normalized) return false;
+  if (dictionary.some((term) => term.toLowerCase() === normalized.toLowerCase())) return true;
+  return isSkillLikeText(normalized, ignorePattern);
+}
+
+function hasSkillListChanged(before = [], after = []) {
+  const left = before.map(normalizeSkill).filter(Boolean);
+  return left.length !== after.length || left.some((value, index) => value !== after[index]);
+}
+
+async function cleanupAllOrphanSupabaseSkills() {
+  const rows = await supabaseRequest("skills?select=id");
+  let deletedCount = 0;
+  for (const row of rows) {
+    const used = await supabaseRequest(`job_skills?select=job_id&skill_id=eq.${encodeURIComponent(row.id)}&limit=1`);
+    if (!used.length) {
+      await supabaseRequest(`skills?id=eq.${encodeURIComponent(row.id)}`, {
+        method: "DELETE",
+        headers: { prefer: "return=minimal" }
+      });
+      deletedCount += 1;
+    }
+  }
+  return deletedCount;
 }
 
 function switchView(viewId) {
@@ -566,8 +665,9 @@ function renderJobList(container, jobs) {
     renderCertificationTags(card.querySelector(".certifications"), getJobCertifications(job));
     card.querySelector(".notes").textContent = job.notes || "";
     const source = card.querySelector(".source");
-    source.href = job.sourceUrl || "#";
-    source.hidden = !job.sourceUrl;
+    const hasSourcePage = job.sourceUrl && !job.sourceUrl.startsWith("manual:");
+    source.href = hasSourcePage ? job.sourceUrl : "#";
+    source.hidden = !hasSourcePage;
     container.appendChild(card);
   });
 }
@@ -984,9 +1084,18 @@ function extractSkillsFromText(raw, parser = getCompanyParser()) {
   const bulletItems = raw
     .split(/\n|・|●|■|,|、|;/)
     .map((item) => cleanText(item).replace(/^[\-\u30fb\s]+/, ""))
-    .filter((item) => item.length >= 2 && item.length <= 42)
-    .filter((item) => !ignorePattern.test(item));
+    .filter((item) => isSkillLikeText(item, ignorePattern));
   return [...new Set([...found, ...bulletItems].map(normalizeSkill).filter(Boolean))].slice(0, 24);
+}
+
+function isSkillLikeText(item, ignorePattern) {
+  if (!item || item.length < 2 || item.length > 24) return false;
+  if (ignorePattern.test(item)) return false;
+  if (/[（）()]/.test(item)) return false;
+  if (/(方|こと|もの|いずれか|下記|要件|満たす|お持ち|興味|ある|経験がある|経験をお持ち|活用したこと|業界|会社|領域向け)$/.test(item)) return false;
+  if (/(に関する|について|として|もしくは|または|等において|どこかの|若手の方)/.test(item)) return false;
+  if (item.length > 14 && !/[A-Za-z0-9]/.test(item)) return false;
+  return true;
 }
 
 function extractCertificationsFromText(raw) {

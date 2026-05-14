@@ -236,7 +236,7 @@ GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON companies TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON jobs TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON skills TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE ON job_skills TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON job_skills TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dictionary_terms TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON company_parser_configs TO anon, authenticated;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
@@ -262,6 +262,7 @@ DROP POLICY IF EXISTS "allow anon delete skills" ON skills;
 DROP POLICY IF EXISTS "allow anon read job_skills" ON job_skills;
 DROP POLICY IF EXISTS "allow anon write job_skills" ON job_skills;
 DROP POLICY IF EXISTS "allow anon update job_skills" ON job_skills;
+DROP POLICY IF EXISTS "allow anon delete job_skills" ON job_skills;
 DROP POLICY IF EXISTS "allow anon read dictionary_terms" ON dictionary_terms;
 DROP POLICY IF EXISTS "allow anon write dictionary_terms" ON dictionary_terms;
 DROP POLICY IF EXISTS "allow anon update dictionary_terms" ON dictionary_terms;
@@ -330,6 +331,10 @@ CREATE POLICY "allow anon update job_skills"
 ON job_skills FOR UPDATE TO anon, authenticated
 USING (true)
 WITH CHECK (true);
+
+CREATE POLICY "allow anon delete job_skills"
+ON job_skills FOR DELETE TO anon, authenticated
+USING (true);
 
 CREATE POLICY "allow anon read dictionary_terms"
 ON dictionary_terms FOR SELECT TO anon, authenticated
