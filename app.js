@@ -161,7 +161,8 @@ async function supabaseRequest(path, options = {}) {
   const text = await response.text();
   const body = text ? JSON.parse(text) : null;
   if (!response.ok) {
-    throw new Error(body?.message || body?.hint || response.statusText);
+    const detail = body?.message || body?.hint || response.statusText;
+    throw new Error(`Supabase ${response.status}: ${detail} (${path})`);
   }
   return body;
 }

@@ -9,6 +9,8 @@ Cloudflare Pagesで静的ファイルを配信し、`supabase-config.json` のUR
 
 anonキーは公開前提のキーです。書き込みを公開したくない場合は、SupabaseのRLSポリシーやCloudflare Accessで保護してください。
 
+401が出る場合は、`supabase-permissions.sql` をSupabaseのSQL Editorで実行してください。テーブルだけ作成してポリシーが無い状態だと、anonキーでは読み書きできません。
+
 ## Cloudflare Pages
 
 リポジトリをPagesに接続し、Build commandは空、Build output directoryは `/` を指定します。
