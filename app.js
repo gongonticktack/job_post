@@ -14,8 +14,8 @@ const sampleJobs = [
     annualIncomeMax: 1050,
     requiredSkills: ["SQL", "Python", "クラウド", "データ基盤"],
     preferredSkills: ["AWS", "生成AI", "プロジェクトマネジメント"],
-    notes: "サンプルデータです。クローリング取得前の表示確認に使えます。",
-    sourceUrl: "https://nttdata-career.jposting.net/joblist/",
+    notes: "サンプルデータです。Supabase接続前の表示確認にも使えます。",
+    sourceUrl: "https://nttdata-career.jposting.net/joblist/sample-1",
     crawledAt: new Date().toISOString()
   },
   {
@@ -35,7 +35,9 @@ const sampleJobs = [
 
 const state = {
   jobs: [],
-  db: null
+  db: null,
+  supabase: null,
+  crawlApiAvailable: true
 };
 
 const els = {
@@ -63,6 +65,7 @@ init();
 
 async function init() {
   state.db = await openDb();
+  state.supabase = await loadSupabaseConfig();
   bindEvents();
   await refresh();
 }
@@ -81,6 +84,161 @@ function bindEvents() {
   els.crawlForm.addEventListener("submit", handleCrawl);
 }
 
+async function apiRequest(path, options = {}) {
+  if (!state.crawlApiAvailable) throw new Error("API unavailable");
+  const response = await fetch(path, {
+    headers: { "content-type": "application/json", ...(options.headers || {}) },
+    ...options
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || `API error ${response.status}`);
+  }
+  return response.json();
+}
+
+async function refresh() {
+  if (state.supabase) {
+    try {
+      state.jobs = await getSupabaseJobs();
+      render();
+      return;
+    } catch (error) {
+      setStatus(`Supabase取得に失敗したため、ブラウザ内DBを表示します: ${error.message}`);
+    }
+  }
+
+  try {
+    state.jobs = await getAllLocalJobs();
+    if (!state.supabase) {
+      setStatus("supabase-config.jsonを読み込めないため、ブラウザ内DBで動作しています。");
+    }
+  } catch (error) {
+    setStatus(`ローカルDBの読み込みに失敗しました: ${error.message}`);
+  }
+  render();
+}
+
+async function saveJobs(jobs) {
+  if (state.supabase) {
+    try {
+      await saveSupabaseJobs(jobs);
+      return;
+    } catch (error) {
+      setStatus(`Supabase保存に失敗したためローカルDBへ保存します: ${error.message}`);
+    }
+  }
+  await saveLocalJobs(jobs);
+}
+
+async function loadSupabaseConfig() {
+  try {
+    const response = await fetch("supabase-config.json", { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const config = await response.json();
+    const url = config?.supabase?.url;
+    const key = config?.supabase?.key;
+    if (!url || !key) throw new Error("supabase.url と supabase.key が必要です");
+    return { url: url.replace(/\/$/, ""), key };
+  } catch (error) {
+    console.warn("Supabase config load failed", error);
+    return null;
+  }
+}
+
+async function supabaseRequest(path, options = {}) {
+  if (!state.supabase) throw new Error("Supabase config is not loaded");
+  const response = await fetch(`${state.supabase.url}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      apikey: state.supabase.key,
+      authorization: `Bearer ${state.supabase.key}`,
+      "content-type": "application/json",
+      prefer: "return=representation",
+      ...(options.headers || {})
+    }
+  });
+  const text = await response.text();
+  const body = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    throw new Error(body?.message || body?.hint || response.statusText);
+  }
+  return body;
+}
+
+async function getSupabaseJobs() {
+  const rows = await supabaseRequest("jobs?select=*,companies(name)&order=crawled_at.desc");
+  return rows.map(toClientJob);
+}
+
+async function saveSupabaseJobs(jobs) {
+  for (const job of jobs) {
+    if (!job.sourceUrl) continue;
+    const companyRows = await supabaseRequest("companies?on_conflict=name", {
+      method: "POST",
+      body: JSON.stringify({ name: job.company || "未設定" }),
+      headers: { prefer: "resolution=merge-duplicates,return=representation" }
+    });
+    const savedJobRows = await supabaseRequest("jobs?on_conflict=source_url", {
+      method: "POST",
+      body: JSON.stringify(toDbJob(job, companyRows[0].id)),
+      headers: { prefer: "resolution=merge-duplicates,return=representation" }
+    });
+    const savedJob = savedJobRows[0];
+    await saveSupabaseSkills(savedJob.id, job.requiredSkills || [], "required");
+    await saveSupabaseSkills(savedJob.id, job.preferredSkills || [], "preferred");
+  }
+}
+
+async function saveSupabaseSkills(jobId, skills, skillType) {
+  const normalizedSkills = [...new Set(skills.map(normalizeSkill).filter(Boolean))];
+  for (const name of normalizedSkills) {
+    const rows = await supabaseRequest("skills?on_conflict=name", {
+      method: "POST",
+      body: JSON.stringify({ name, normalized_name: name.toLowerCase() }),
+      headers: { prefer: "resolution=merge-duplicates,return=representation" }
+    });
+    await supabaseRequest("job_skills?on_conflict=job_id,skill_id,skill_type", {
+      method: "POST",
+      body: JSON.stringify({ job_id: jobId, skill_id: rows[0].id, skill_type: skillType }),
+      headers: { prefer: "resolution=ignore-duplicates,return=minimal" }
+    });
+  }
+}
+
+function toClientJob(row) {
+  return {
+    id: row.id,
+    company: row.companies?.name || row.company || "",
+    title: row.title || "",
+    description: row.description || "",
+    annualIncomeMin: row.annual_income_min,
+    annualIncomeMax: row.annual_income_max,
+    annualIncomeRaw: row.annual_income_raw || "",
+    requiredSkills: row.required_skills || [],
+    preferredSkills: row.preferred_skills || [],
+    notes: row.notes || "",
+    sourceUrl: row.source_url || "",
+    crawledAt: row.crawled_at
+  };
+}
+
+function toDbJob(job, companyId) {
+  return {
+    company_id: companyId,
+    title: job.title || "",
+    description: job.description || "",
+    annual_income_min: Number.isFinite(job.annualIncomeMin) ? job.annualIncomeMin : null,
+    annual_income_max: Number.isFinite(job.annualIncomeMax) ? job.annualIncomeMax : null,
+    annual_income_raw: job.annualIncomeRaw || "",
+    required_skills: Array.isArray(job.requiredSkills) ? job.requiredSkills : [],
+    preferred_skills: Array.isArray(job.preferredSkills) ? job.preferredSkills : [],
+    notes: job.notes || "",
+    source_url: job.sourceUrl,
+    crawled_at: job.crawledAt || new Date().toISOString()
+  };
+}
+
 function openDb() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -97,19 +255,15 @@ function openDb() {
   });
 }
 
-function tx(mode = "readonly") {
-  return state.db.transaction(STORE, mode).objectStore(STORE);
-}
-
-function getAllJobs() {
+function getAllLocalJobs() {
   return new Promise((resolve, reject) => {
-    const request = tx().getAll();
+    const request = state.db.transaction(STORE).objectStore(STORE).getAll();
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
 }
 
-function saveJobs(jobs) {
+function saveLocalJobs(jobs) {
   return new Promise((resolve, reject) => {
     const transaction = state.db.transaction(STORE, "readwrite");
     const store = transaction.objectStore(STORE);
@@ -117,11 +271,6 @@ function saveJobs(jobs) {
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
   });
-}
-
-async function refresh() {
-  state.jobs = await getAllJobs();
-  render();
 }
 
 function switchView(viewId) {
@@ -234,10 +383,11 @@ async function handleCrawl(event) {
 
   setStatus("求人一覧ページを取得しています...");
   els.crawlPreview.innerHTML = "";
+
   try {
     const jobs = await crawlJobs(url, company, limit);
     if (!jobs.length) {
-      setStatus("求人情報を抽出できませんでした。ページ構造が変わっているか、ブラウザのCORS制約で詳細ページを読めない可能性があります。");
+      setStatus("求人情報を抽出できませんでした。ページ構造が変わっているか、取得先サイト側でアクセスが制限されている可能性があります。");
       return;
     }
     await saveJobs(jobs);
@@ -250,6 +400,18 @@ async function handleCrawl(event) {
 }
 
 async function crawlJobs(listUrl, company, limit) {
+  if (state.crawlApiAvailable) {
+    try {
+      const data = await apiRequest("/api/crawl", {
+        method: "POST",
+        body: JSON.stringify({ url: listUrl, company, limit })
+      });
+      return data.jobs || [];
+    } catch (error) {
+      state.crawlApiAvailable = false;
+      setStatus(`CloudflareのクロールAPIが使えないためブラウザから取得します: ${error.message}`);
+    }
+  }
   const listHtml = await fetchText(listUrl);
   const detailUrls = extractJobLinks(listHtml, listUrl).slice(0, limit);
   if (!detailUrls.length) {
@@ -263,9 +425,7 @@ async function crawlJobs(listUrl, company, limit) {
     try {
       const html = await fetchText(detailUrl);
       const job = parseJobDetail(html, detailUrl, company);
-      if (job.description || job.requiredSkills.length || job.preferredSkills.length) {
-        jobs.push(job);
-      }
+      if (job.description || job.requiredSkills.length || job.preferredSkills.length) jobs.push(job);
     } catch (error) {
       console.warn("detail fetch failed", detailUrl, error);
     }
@@ -274,18 +434,9 @@ async function crawlJobs(listUrl, company, limit) {
 }
 
 async function fetchText(url) {
-  try {
-    const response = await fetch(url, { credentials: "omit" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.text();
-  } catch (directError) {
-    const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-    const response = await fetch(proxied);
-    if (!response.ok) {
-      throw new Error(`直接取得とプロキシ取得に失敗しました (${directError.message})`);
-    }
-    return await response.text();
-  }
+  const response = await fetch(url, { credentials: "omit" });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.text();
 }
 
 function extractJobLinks(html, baseUrl) {
@@ -299,44 +450,22 @@ function extractJobLinks(html, baseUrl) {
 function parseJobDetail(html, sourceUrl, company) {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const text = cleanText(doc.body?.innerText || "");
-  const sections = readLabeledSections(doc);
-  const title = cleanText(doc.querySelector("h1, h2, .jobTitle, .title")?.textContent || sections["職種名"] || sections["求人名"] || "");
-  const description = firstSection(sections, ["業務内容", "仕事内容", "職務内容", "募集内容", "職務概要"]) || sliceAround(text, /(業務内容|仕事内容|職務内容)/);
-  const incomeRaw = firstSection(sections, ["年収", "給与", "想定年収", "待遇"]) || findIncomeText(text);
+  const title = cleanText(doc.querySelector("h1, h2, .jobTitle, .title")?.textContent || "");
+  const incomeRaw = findIncomeText(text);
   const income = parseIncome(incomeRaw);
-  const requiredRaw = firstSection(sections, ["求めるスキル(必須)", "必須条件", "必要条件", "応募資格", "求める経験・スキル"]);
-  const preferredRaw = firstSection(sections, ["求めるスキル(推奨)", "歓迎条件", "歓迎スキル", "歓迎経験"]);
-  const notes = firstSection(sections, ["補足", "その他", "備考", "勤務地", "勤務条件"]);
-
   return {
     company,
     title,
-    description: description || text.slice(0, 260),
+    description: sliceAround(text, /(業務内容|仕事内容|職務内容)/) || text.slice(0, 260),
     annualIncomeRaw: incomeRaw,
     annualIncomeMin: income.min,
     annualIncomeMax: income.max,
-    requiredSkills: extractSkills(requiredRaw || text),
-    preferredSkills: extractSkills(preferredRaw),
-    notes,
+    requiredSkills: extractSkills(text),
+    preferredSkills: [],
+    notes: "",
     sourceUrl,
     crawledAt: new Date().toISOString()
   };
-}
-
-function readLabeledSections(doc) {
-  const sections = {};
-  const rows = doc.querySelectorAll("tr, dl, .item, .section, section");
-  rows.forEach((row) => {
-    const label = cleanText(row.querySelector("th, dt, h2, h3, .label, .ttl, .title")?.textContent || "");
-    const value = cleanText(row.querySelector("td, dd, p, .content, .txt, .detail")?.textContent || "");
-    if (label && value && label.length <= 40) sections[label] = value;
-  });
-  return sections;
-}
-
-function firstSection(sections, labels) {
-  const found = Object.entries(sections).find(([label]) => labels.some((target) => label.includes(target)));
-  return found ? found[1] : "";
 }
 
 function findIncomeText(text) {
@@ -361,20 +490,11 @@ function extractSkills(raw) {
     "生成AI", "プロジェクトマネジメント", "チームリード", "アジャイル", "セキュリティ",
     "ネットワーク", "データ基盤", "ETL", "BI"
   ];
-  const found = known.filter((skill) => new RegExp(escapeRegExp(skill), "i").test(raw));
-  const bulletItems = raw
-    .split(/\n|・|●|■|,|、|;/)
-    .map((item) => cleanText(item).replace(/^[\-\u30fb\s]+/, ""))
-    .filter((item) => item.length >= 2 && item.length <= 28)
-    .filter((item) => !/(必須|歓迎|条件|経験|以上|以下|年収|勤務地|勤務)/.test(item));
-  return [...new Set([...found, ...bulletItems].map(normalizeSkill).filter(Boolean))].slice(0, 18);
+  return [...new Set(known.filter((skill) => new RegExp(escapeRegExp(skill), "i").test(raw)))];
 }
 
 function normalizeSkill(skill) {
-  return cleanText(skill)
-    .replace(/経験$/, "")
-    .replace(/スキル$/, "")
-    .trim();
+  return cleanText(skill).replace(/経験$/, "").replace(/スキル$/, "").trim();
 }
 
 function sliceAround(text, pattern) {
