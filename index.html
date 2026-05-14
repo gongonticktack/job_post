@@ -36,33 +36,31 @@
             <strong id="companyCount">0</strong>
           </article>
           <article class="metric">
-            <span>必須スキル種類</span>
-            <strong id="requiredSkillCount">0</strong>
-          </article>
-          <article class="metric">
-            <span>平均年収上限</span>
+            <span>平均年収</span>
             <strong id="avgIncome">-</strong>
           </article>
         </div>
 
         <div class="dashboard-layout">
-          <section class="panel">
-            <div class="panel-head">
-              <h2>必須スキル傾向</h2>
-              <select id="skillTypeFilter" aria-label="スキル種別">
-                <option value="required">必須</option>
-                <option value="preferred">推奨</option>
-              </select>
-            </div>
-            <div id="skillChart" class="skill-chart empty">データがありません</div>
-          </section>
+          <div class="insight-column">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>必須スキル傾向</h2>
+                <select id="skillTypeFilter" aria-label="スキル種別">
+                  <option value="required">必須</option>
+                  <option value="preferred">推奨</option>
+                </select>
+              </div>
+              <div id="skillChart" class="skill-chart empty">データがありません</div>
+            </section>
 
-          <section class="panel">
-            <div class="panel-head">
-              <h2>資格傾向</h2>
-            </div>
-            <div id="certificationChart" class="skill-chart empty">データがありません</div>
-          </section>
+            <section class="panel compact-panel">
+              <div class="panel-head">
+                <h2>資格傾向</h2>
+              </div>
+              <div id="certificationChart" class="skill-chart certification-cloud empty">データがありません</div>
+            </section>
+          </div>
 
           <section class="panel">
             <div class="panel-head">
@@ -80,7 +78,6 @@
         <section class="panel crawler-panel">
           <div class="panel-head">
             <h2>求人情報を取得</h2>
-            <button id="seedButton" class="ghost-button" type="button">サンプル投入</button>
           </div>
 
           <form id="crawlForm" class="crawl-form">

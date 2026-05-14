@@ -13,6 +13,8 @@ anonキーは公開前提のキーです。書き込みを公開したくない�
 
 既にDB作成済みの状態で直接入力ページの追加項目を使う場合は、`supabase-add-job-fields.sql` もSupabaseのSQL Editorで実行してください。
 過去に元テキスト・雇用形態・想定役職・労働形態の列を追加済みで不要な場合は、`supabase-drop-unused-job-fields.sql` を実行すると削除できます。
+辞書をSupabaseで管理する場合は、`supabase-dictionaries.sql` をSupabaseのSQL Editorで実行してください。設定画面のスキル辞書・資格辞書がDBに保存されます。
+会社ごとの求人票構成ルールをSupabaseで管理する場合は、`supabase-parser-configs.sql` をSupabaseのSQL Editorで実行してください。NTT DATA形式の初期設定も投入されます。
 
 ## 公開
 

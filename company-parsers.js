@@ -4,7 +4,7 @@ window.JobParserConfig = {
   defaultCompany: "NTT DATA",
   companies: {
     "NTT DATA": {
-      titlePattern: /^【.+?】/,
+      titlePattern: "^【.+?】",
       headings: {
         company: ["募集元"],
         description: ["職務内容"],

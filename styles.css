@@ -160,7 +160,7 @@ select {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 18px;
 }
@@ -209,8 +209,18 @@ select {
 
 .dashboard-layout {
   display: grid;
-  grid-template-columns: minmax(280px, 0.8fr) minmax(280px, 0.8fr) minmax(420px, 1.35fr);
+  grid-template-columns: minmax(300px, 0.78fr) minmax(560px, 1.52fr);
   gap: 18px;
+}
+
+.insight-column {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.compact-panel {
+  padding-bottom: 14px;
 }
 
 .panel {
@@ -286,6 +296,10 @@ select {
   gap: 10px;
   min-height: 260px;
   padding: 8px 2px 2px;
+}
+
+.certification-cloud.word-cloud {
+  min-height: 130px;
 }
 
 .cloud-word {
