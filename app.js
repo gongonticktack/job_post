@@ -933,9 +933,10 @@ function syncCompanySelect(select, input) {
 
 function parseManualJobText(text, fallbackCompany) {
   const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
-  const parser = getCompanyParser(fallbackCompany);
+  const detectedCompany = detectCompanyFromText(normalized, fallbackCompany);
+  const parser = getCompanyParser(detectedCompany);
   const headings = parser.headings || {};
-  const company = canonicalCompanyName(pickSection(normalized, headings.company, parser) || fallbackCompany || "未設定");
+  const company = canonicalCompanyName(pickSection(normalized, headings.company, parser) || detectedCompany || fallbackCompany || "未設定");
   const title = pickManualTitle(normalized, parser);
   const description = pickSection(normalized, headings.description, parser) || "";
   const appealPoints = pickSection(normalized, headings.appealPoints, parser) || "";
@@ -1066,6 +1067,15 @@ function getCompanyParser(company) {
   };
 }
 
+function detectCompanyFromText(text, fallbackCompany) {
+  if (/株式会社NTTデータ|NTT\s*DATA/i.test(text)) return canonicalCompanyName("株式会社NTTデータ");
+  if (/富士通株式会社|Fujitsu/i.test(text)) return canonicalCompanyName("富士通株式会社");
+  if (/EC本部|トヨタ自動車|トヨタグループ|Teamcenter|TargetLink/.test(text)) {
+    return canonicalCompanyName("株式会社トヨタシステムズ");
+  }
+  return canonicalCompanyName(fallbackCompany || "");
+}
+
 function canonicalCompanyName(name) {
   const raw = cleanCompanyName(name);
   if (!raw) return "";
@@ -1124,15 +1134,34 @@ function getTitlePattern(parser) {
 function pickSection(text, labels = [], parser = getCompanyParser()) {
   const lines = text.split("\n");
   const headings = parser.sectionHeadings || [];
-  const start = lines.findIndex((line) => labels.some((label) => line.trim() === label || line.includes(label)));
+  const start = lines.findIndex((line) => labels.some((label) => isLabelLine(line, label)));
   if (start < 0) return "";
   const values = [];
+  const inlineValue = getInlineLabelValue(lines[start], labels);
+  if (inlineValue && !/^【[^】]+】$/.test(inlineValue)) values.push(inlineValue);
   for (let i = start + 1; i < lines.length; i += 1) {
     const line = lines[i].trim();
     if (line && headings.some((heading) => line === heading || line.includes(heading))) break;
     values.push(lines[i]);
   }
   return cleanText(values.join("\n"));
+}
+
+function isLabelLine(line, label) {
+  const trimmed = line.trim();
+  return trimmed === label || trimmed.startsWith(`${label}\t`) || trimmed.startsWith(`${label} `) || trimmed.includes(label);
+}
+
+function getInlineLabelValue(line, labels = []) {
+  const trimmed = line.trim();
+  const label = labels.find((item) => isLabelLine(trimmed, item));
+  if (!label) return "";
+  const index = trimmed.indexOf(label);
+  if (index < 0) return "";
+  return trimmed
+    .slice(index + label.length)
+    .replace(/^[\s\t:：]+/, "")
+    .trim();
 }
 
 function findIncomeText(text) {
