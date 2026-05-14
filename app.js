@@ -632,7 +632,7 @@ function renderSkillChart() {
     return;
   }
 
-  renderWordCloud(els.skillChart, counts, 36);
+  renderWordCloud(els.skillChart, counts, 36, "skill");
 }
 
 function renderCertificationChart() {
@@ -644,19 +644,18 @@ function renderCertificationChart() {
     els.certificationChart.textContent = "データがありません";
     return;
   }
-  renderWordCloud(els.certificationChart, counts, 28);
+  renderWordCloud(els.certificationChart, counts, 28, "certification");
 }
 
-function renderWordCloud(container, counts, limit) {
+function renderWordCloud(container, counts, limit, type = "skill") {
   const max = counts[0].count;
-  const min = counts[counts.length - 1].count;
   counts.slice(0, limit).forEach(({ name, count }, index) => {
-    const weight = max === min ? 1 : (count - min) / (max - min);
+    const weight = count <= 1 || max <= 1 ? 0 : (count - 1) / (max - 1);
     const item = document.createElement("button");
-    item.className = "cloud-word";
+    item.className = `cloud-word ${getWordCategoryClass(name, type)}`;
     item.type = "button";
-    item.style.setProperty("--size", `${14 + weight * 20}px`);
-    item.style.setProperty("--alpha", `${0.55 + weight * 0.45}`);
+    item.style.setProperty("--size", `${12 + weight * 30}px`);
+    item.style.setProperty("--alpha", `${0.46 + weight * 0.54}`);
     item.style.setProperty("--delay", `${index * 16}ms`);
     item.title = `${name}: ${count}件`;
     item.textContent = name;
@@ -670,6 +669,58 @@ function renderWordCloud(container, counts, limit) {
     item.appendChild(badge);
     container.appendChild(item);
   });
+}
+
+function getWordCategoryClass(name, type) {
+  if (type === "certification") return "word-certification";
+  const value = normalizeSkill(name).toLowerCase();
+  if (matchesTerm(value, [
+    "javascript", "typescript", "python", "java", "c#", "c++", "go", "ruby", "php", "sql",
+    "swift", "kotlin", "scala", "rust", "r", "vba", "shell", "bash", "powershell", "html", "css"
+  ])) return "word-language";
+  if (matchesTerm(value, [
+    "react", "vue", "angular", "spring", "spring boot", "node.js", "next.js", "nuxt", "express",
+    "nestjs", "django", "flask", "fastapi", "laravel", "rails", ".net", "asp.net", "unity", "unreal engine"
+  ])) return "word-framework";
+  if (matchesTerm(value, [
+    "aws", "azure", "gcp", "docker", "kubernetes", "linux", "terraform", "ansible", "jenkins",
+    "github actions", "ci/cd", "devops", "sre", "vmware", "openshift", "eks", "aks", "cloud run", "lambda",
+    "オンプレミス", "クラウド", "windows server"
+  ])) return "word-infra";
+  if (matchesTerm(value, [
+    "postgresql", "mysql", "oracle", "sql server", "mongodb", "redis", "elasticsearch", "dynamodb",
+    "bigquery", "snowflake", "redshift", "databricks", "etl", "bi", "dwh", "データマート",
+    "データ分析", "データ基盤", "データベース", "tableau", "power bi", "looker", "dbt"
+  ])) return "word-data";
+  if (matchesTerm(value, [
+    "ai", "生成ai", "機械学習", "mlops", "llm", "rag", "kaggle", "pytorch", "tensorflow", "vllm",
+    "hpc", "cpu", "npu", "gpgpu", "アクセラレータ"
+  ])) return "word-ai";
+  if (matchesTerm(value, [
+    "scm", "erp", "sap", "sap s/4hana", "oracle cloud scm", "kinaxis", "kinaxis maestro", "anaplan", "o9",
+    "mcframe", "サプライチェーン", "物流", "調達", "生産計画", "在庫", "品質管理",
+    "組み込みシステム", "組み込み", "webシステム", "制御システム", "制御モデル",
+    "車両性能シミュレーション", "モデルベース開発", "エンジニアリングシステム", "情報管理システム"
+  ])) return "word-domain";
+  if (matchesTerm(value, [
+    "要件定義", "設計", "開発", "運用", "仕様定義", "上流工程", "詳細設計", "テスト",
+    "基本設計", "外部設計", "内部設計", "単体テスト", "結合テスト", "総合テスト", "uat",
+    "品質保証", "qa", "テスト自動化", "アジャイル", "スクラム", "ウォーターフォール", "api設計"
+  ])) return "word-process";
+  if (matchesTerm(value, [
+    "プロジェクトマネジメント", "ステークホルダーマネジメント", "チームリード", "qcd", "顧客折衝",
+    "pl", "pm", "pmo", "wbs", "課題管理", "リスク管理", "進捗管理", "予算管理",
+    "ベンダーマネジメント", "ベンダーコントロール", "ピープルマネジメント", "プロダクトマネジメント",
+    "プロダクトオーナー", "pdm", "po", "チームマネジメント"
+  ])) return "word-management";
+  if (matchesTerm(value, [
+    "セキュリティ", "ゼロトラスト", "認証", "認可", "oauth", "oidc", "saml", "active directory", "entra id"
+  ])) return "word-security";
+  return "word-general";
+}
+
+function matchesTerm(value, terms) {
+  return terms.some((term) => value === term.toLowerCase());
 }
 
 function isCurrentFilter(name) {
