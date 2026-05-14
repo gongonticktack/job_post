@@ -62,6 +62,31 @@ window.JobParserConfig = {
       ignoreSkillPatterns: [
         "必須", "歓迎", "経験", "知見", "資格", "言語", "以下", "以上", "勤務地", "勤務", "日常会話", "希望"
       ]
+    },
+    "株式会社トヨタシステムズ": {
+      titlePattern: ".+",
+      titleMatchIndex: 0,
+      headings: {
+        company: [],
+        description: ["職務内容"],
+        appealPoints: ["【求人のポイント】"],
+        referenceInfo: ["【目指す姿】", "【教育/成長環境】"],
+        requiredSkills: ["【必須】"],
+        requiredLanguage: [],
+        requiredCertifications: [],
+        preferredSkills: ["【歓迎】"],
+        preferredLanguage: [],
+        preferredCertifications: [],
+        income: ["待遇"],
+        location: ["勤務地"]
+      },
+      sectionHeadings: [
+        "職務内容", "応募資格", "待遇", "勤務地",
+        "【必須】", "【歓迎】", "＜補足＞", "（１）就業場所", "（２）業務内容"
+      ],
+      ignoreSkillPatterns: [
+        "必須", "歓迎", "経験", "ご経験", "お持ち", "方", "問いません", "勤務地", "待遇", "雇用", "試用期間"
+      ]
     }
   },
   skillDictionary: [
@@ -77,7 +102,12 @@ window.JobParserConfig = {
     "HPC", "AI", "CPU", "NPU", "GPGPU", "OSS", "PyTorch", "TensorFlow", "vLLM",
     "OS", "ドライバ", "コンパイラ", "プロファイラ", "デバッガ",
     "コンピューターアーキテクチャ", "ソフトウェア開発", "ハードウェア",
-    "チームマネジメント", "研究開発", "アクセラレータ", "オープンソースソフトウェア"
+    "チームマネジメント", "研究開発", "アクセラレータ", "オープンソースソフトウェア",
+    "組み込みシステム", "組み込み", "Webシステム", "制御システム", "制御モデル",
+    "車両性能シミュレーション", "モデルベース開発", "エンジニアリングシステム",
+    "オンプレミス", "仕様定義", "上流工程", "ベンダーコントロール",
+    "アプリケーション開発", "詳細設計", "テスト", "システム開発", "運用サポート",
+    "開発環境", "情報管理システム", "Teamcenter", "integrity", "MATLAB", "Simulink", "TargetLink"
   ],
   certificationDictionary: [
     "PMP", "IPA", "プロジェクトマネージャ", "システムアーキテクト", "データベース",

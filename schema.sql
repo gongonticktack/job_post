@@ -168,6 +168,35 @@ VALUES (
     ]
   }'::jsonb,
   TRUE
+),
+(
+  '株式会社トヨタシステムズ',
+  '{
+    "titlePattern": ".+",
+    "titleMatchIndex": 0,
+    "headings": {
+      "company": [],
+      "description": ["職務内容"],
+      "appealPoints": ["【求人のポイント】"],
+      "referenceInfo": ["【目指す姿】", "【教育/成長環境】"],
+      "requiredSkills": ["【必須】"],
+      "requiredLanguage": [],
+      "requiredCertifications": [],
+      "preferredSkills": ["【歓迎】"],
+      "preferredLanguage": [],
+      "preferredCertifications": [],
+      "income": ["待遇"],
+      "location": ["勤務地"]
+    },
+    "sectionHeadings": [
+      "職務内容", "応募資格", "待遇", "勤務地",
+      "【必須】", "【歓迎】", "＜補足＞", "（１）就業場所", "（２）業務内容"
+    ],
+    "ignoreSkillPatterns": [
+      "必須", "歓迎", "経験", "ご経験", "お持ち", "方", "問いません", "勤務地", "待遇", "雇用", "試用期間"
+    ]
+  }'::jsonb,
+  TRUE
 )
 ON CONFLICT (company_name) DO UPDATE
 SET parser_config = EXCLUDED.parser_config,
@@ -263,6 +292,30 @@ VALUES
   ('skill', '研究開発', 319),
   ('skill', 'アクセラレータ', 320),
   ('skill', 'オープンソースソフトウェア', 321),
+  ('skill', '組み込みシステム', 401),
+  ('skill', '組み込み', 402),
+  ('skill', 'Webシステム', 403),
+  ('skill', '制御システム', 404),
+  ('skill', '制御モデル', 405),
+  ('skill', '車両性能シミュレーション', 406),
+  ('skill', 'モデルベース開発', 407),
+  ('skill', 'エンジニアリングシステム', 408),
+  ('skill', 'オンプレミス', 409),
+  ('skill', '仕様定義', 410),
+  ('skill', '上流工程', 411),
+  ('skill', 'ベンダーコントロール', 412),
+  ('skill', 'アプリケーション開発', 413),
+  ('skill', '詳細設計', 414),
+  ('skill', 'テスト', 415),
+  ('skill', 'システム開発', 416),
+  ('skill', '運用サポート', 417),
+  ('skill', '開発環境', 418),
+  ('skill', '情報管理システム', 419),
+  ('skill', 'Teamcenter', 420),
+  ('skill', 'integrity', 421),
+  ('skill', 'MATLAB', 422),
+  ('skill', 'Simulink', 423),
+  ('skill', 'TargetLink', 424),
   ('certification', 'PMP', 1),
   ('certification', 'IPA', 2),
   ('certification', 'プロジェクトマネージャ', 3),
