@@ -90,7 +90,7 @@ h1 {
   margin-bottom: 0;
   color: #ffffff;
   font-family: "Great Vibes", "Brush Script MT", cursive;
-  font-size: clamp(58px, 6.8vw, 92px);
+  font-size: clamp(48px, 5.8vw, 78px);
   font-weight: 400;
   line-height: 0.82;
   text-shadow:
@@ -107,18 +107,21 @@ h2 {
 
 .brand {
   display: grid;
+  justify-items: end;
   gap: 10px;
+  width: max-content;
   max-width: 100%;
 }
 
 .brand p {
   margin-bottom: 0;
+  text-align: right;
   color: var(--muted);
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   font-size: clamp(12px, 1.4vw, 16px);
   font-weight: 700;
   line-height: 1;
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 0;
 }
 
@@ -754,10 +757,11 @@ label {
   }
 
   h1 {
-    font-size: clamp(48px, 18vw, 64px);
+    font-size: clamp(40px, 15vw, 56px);
   }
 
   .brand {
+    width: fit-content;
     gap: 6px;
   }
 
