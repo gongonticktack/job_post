@@ -127,7 +127,7 @@ async function loadParserSettings() {
     config.companies = rows.reduce((acc, row) => {
       acc[row.company_name] = row.parser_config;
       return acc;
-    }, {});
+    }, { ...config.defaultCompanies });
   } catch (error) {
     console.warn("parser settings remote load failed", error);
   }
@@ -1063,11 +1063,23 @@ function findIncomeText(text) {
 }
 
 function parseIncome(raw) {
-  const values = (raw.match(/\d{3,4}/g) || []).map(Number);
+  const target = pickIncomeTarget(raw);
+  const yenValues = (target.match(/\d[\d,]{4,}/g) || [])
+    .map((value) => Number(value.replace(/,/g, "")))
+    .filter((value) => value >= 10000)
+    .map((value) => Math.round(value / 10000));
+  const values = yenValues.length
+    ? yenValues
+    : (target.match(/\d{3,4}/g) || []).map(Number);
   return {
     min: values.length ? Math.min(...values) : null,
     max: values.length ? Math.max(...values) : null
   };
+}
+
+function pickIncomeTarget(raw) {
+  const lines = String(raw || "").split(/\n|。/).map((line) => line.trim()).filter(Boolean);
+  return lines.find((line) => /年収|想定年収/.test(line)) || raw || "";
 }
 
 function extractSkillsFromText(raw, parser = getCompanyParser()) {

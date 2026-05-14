@@ -102,7 +102,7 @@ FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 INSERT INTO company_parser_configs (company_name, parser_config, enabled)
 VALUES (
-  'NTT DATA',
+  '株式会社NTTデータ',
   '{
     "titlePattern": "^【.+?】",
     "titleMatchIndex": 1,
@@ -128,6 +128,43 @@ VALUES (
     ],
     "ignoreSkillPatterns": [
       "特になし", "必須", "歓迎", "条件", "以上", "以下", "勤務地", "勤務", "資格", "語学", "英語力"
+    ]
+  }'::jsonb,
+  TRUE
+),
+(
+  '富士通株式会社',
+  '{
+    "titlePattern": ".+",
+    "titleMatchIndex": 0,
+    "headings": {
+      "company": ["【会社名】"],
+      "description": ["【募集範囲と具体的業務内容】"],
+      "appealPoints": ["【仕事の魅力・やりがい】"],
+      "referenceInfo": ["【募集背景と応募者へのメッセージ】"],
+      "requiredSkills": ["【必須の経験・キャリアや資格・言語】"],
+      "requiredLanguage": ["【語学力】"],
+      "requiredCertifications": ["【必須の経験・キャリアや資格・言語】"],
+      "preferredSkills": ["【歓迎する経験・キャリアや資格・言語】"],
+      "preferredLanguage": ["【日本語レベル】"],
+      "preferredCertifications": ["【歓迎する経験・キャリアや資格・言語】"],
+      "income": ["【給与】"],
+      "location": ["【勤務地】"]
+    },
+    "sectionHeadings": [
+      "勤務地域", "Location Flexibility", "求人ID", "掲載開始日",
+      "【募集テーマ】", "－－－職務内容－－－－－－", "【会社名】", "【BG名】", "【本部名】",
+      "【組織としてのミッション】", "【募集背景と応募者へのメッセージ】", "【担当業界・業種】",
+      "【就業環境・勤務形態】", "【募集範囲と具体的業務内容】", "【個人に期待する役割やミッション】",
+      "【仕事の魅力・やりがい】", "【Role Group】", "【Role Family】", "【Role Specialism】",
+      "【Job Function】", "【募集人数】", "－－－求める資格・スキル・経験など－－－－－－",
+      "【必須の経験・キャリアや資格・言語】", "【歓迎する経験・キャリアや資格・言語】",
+      "【語学力】", "【日本語レベル】", "－－－待遇－－－－－－", "【ポジション名】", "【給与】",
+      "－－－勤務地－－－－－－", "【勤務地】", "【主な勤務地（上記以外）】", "－－－備考－－－－－－",
+      "【業務内容の変更の範囲】", "【契約期間】", "【就業場所の変更の範囲】"
+    ],
+    "ignoreSkillPatterns": [
+      "必須", "歓迎", "経験", "知見", "資格", "言語", "以下", "以上", "勤務地", "勤務", "日常会話", "希望"
     ]
   }'::jsonb,
   TRUE
@@ -205,6 +242,27 @@ VALUES
   ('skill', '生産計画', 65),
   ('skill', '在庫', 66),
   ('skill', '品質管理', 67),
+  ('skill', 'HPC', 301),
+  ('skill', 'AI', 302),
+  ('skill', 'CPU', 303),
+  ('skill', 'NPU', 304),
+  ('skill', 'GPGPU', 305),
+  ('skill', 'OSS', 306),
+  ('skill', 'PyTorch', 307),
+  ('skill', 'TensorFlow', 308),
+  ('skill', 'vLLM', 309),
+  ('skill', 'OS', 310),
+  ('skill', 'ドライバ', 311),
+  ('skill', 'コンパイラ', 312),
+  ('skill', 'プロファイラ', 313),
+  ('skill', 'デバッガ', 314),
+  ('skill', 'コンピューターアーキテクチャ', 315),
+  ('skill', 'ソフトウェア開発', 316),
+  ('skill', 'ハードウェア', 317),
+  ('skill', 'チームマネジメント', 318),
+  ('skill', '研究開発', 319),
+  ('skill', 'アクセラレータ', 320),
+  ('skill', 'オープンソースソフトウェア', 321),
   ('certification', 'PMP', 1),
   ('certification', 'IPA', 2),
   ('certification', 'プロジェクトマネージャ', 3),
