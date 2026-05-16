@@ -32,7 +32,7 @@ const state = {
   db: null,
   supabase: null,
   manualDraft: null,
-  activeFacetFilter: null
+  activeFacetFilters: []
 };
 
 const els = {
@@ -43,8 +43,10 @@ const els = {
   companyCount: document.querySelector("#companyCount"),
   avgIncome: document.querySelector("#avgIncome"),
   skillTypeFilter: document.querySelector("#skillTypeFilter"),
+  resetSkillFilters: document.querySelector("#resetSkillFilters"),
   skillChart: document.querySelector("#skillChart"),
   certificationChart: document.querySelector("#certificationChart"),
+  resetCertificationFilters: document.querySelector("#resetCertificationFilters"),
   searchInput: document.querySelector("#searchInput"),
   jobList: document.querySelector("#jobList"),
   crawlForm: document.querySelector("#crawlForm"),
@@ -88,22 +90,21 @@ function bindEvents() {
     tab.addEventListener("click", () => switchView(tab.dataset.view));
   });
   els.settingsButton.addEventListener("click", () => switchView("settings"));
-  els.skillTypeFilter.addEventListener("change", () => {
-    if (state.activeFacetFilter?.type === "skill") {
-      clearFacetFilter();
-      els.searchInput.value = "";
-    }
+  els.skillTypeFilter.addEventListener("change", render);
+  els.searchInput.addEventListener("input", render);
+  els.resetSkillFilters.addEventListener("click", () => {
+    clearFacetFilters("skill");
     render();
   });
-  els.searchInput.addEventListener("input", () => {
-    clearFacetFilter();
+  els.resetCertificationFilters.addEventListener("click", () => {
+    clearFacetFilters("certification");
     render();
   });
   [els.skillChart, els.certificationChart].forEach((chart) => {
     chart.addEventListener("click", (event) => {
-      if (event.target !== chart || (!els.searchInput.value.trim() && !state.activeFacetFilter)) return;
-      clearFacetFilter();
-      els.searchInput.value = "";
+      if (event.target !== chart) return;
+      if (chart === els.skillChart) clearFacetFilters("skill");
+      if (chart === els.certificationChart) clearFacetFilters("certification");
       render();
     });
   });
@@ -645,10 +646,20 @@ function render() {
   updateCompanyOptions();
   const visibleJobs = filterJobs(state.jobs);
   renderMetrics(visibleJobs);
+  renderFilterControls();
   renderSkillChart(visibleJobs);
   renderCertificationChart(visibleJobs);
   renderJobList(els.jobList, visibleJobs);
   renderSettingsJobList();
+}
+
+function renderFilterControls() {
+  const skillCount = countActiveFilters("skill");
+  const certificationCount = countActiveFilters("certification");
+  els.resetSkillFilters.hidden = skillCount === 0;
+  els.resetCertificationFilters.hidden = certificationCount === 0;
+  els.resetSkillFilters.textContent = skillCount ? `スキル条件リセット (${skillCount})` : "スキル条件リセット";
+  els.resetCertificationFilters.textContent = certificationCount ? `資格条件リセット (${certificationCount})` : "資格条件リセット";
 }
 
 function updateCompanyOptions() {
@@ -740,12 +751,7 @@ function renderWordCloud(container, counts, limit, type = "skill", key = "") {
     item.textContent = name;
     item.classList.toggle("is-filtering", isCurrentFacetFilter(name, type, key));
     item.addEventListener("click", () => {
-      if (isCurrentFacetFilter(name, type, key)) {
-        clearFacetFilter();
-        els.searchInput.value = "";
-      } else {
-        setFacetFilter(name, type, key);
-      }
+      toggleFacetFilter(name, type, key);
       render();
     });
     const badge = document.createElement("span");
@@ -824,27 +830,47 @@ function colorToRgb(color) {
   ].join(", ");
 }
 
-function setFacetFilter(name, type, key = "") {
-  const normalizedName = type === "certification" ? normalizeCertification(name) : normalizeSkill(name);
-  state.activeFacetFilter = {
-    name,
+function toggleFacetFilter(name, type, key = "") {
+  const normalizedName = normalizeFacetName(name, type);
+  if (!normalizedName) return;
+  const index = state.activeFacetFilters.findIndex((filter) => isSameFacetFilter(filter, type, key, normalizedName));
+  if (index >= 0) {
+    state.activeFacetFilters.splice(index, 1);
+    return;
+  }
+  state.activeFacetFilters.push({
+    name: normalizedName,
     normalizedName: normalizedName.toLowerCase(),
     type,
     key
-  };
-  els.searchInput.value = name;
+  });
 }
 
-function clearFacetFilter() {
-  state.activeFacetFilter = null;
+function clearFacetFilters(type = "") {
+  if (!type) {
+    state.activeFacetFilters = [];
+    return;
+  }
+  state.activeFacetFilters = state.activeFacetFilters.filter((filter) => filter.type !== type);
 }
 
 function isCurrentFacetFilter(name, type, key = "") {
-  const filter = state.activeFacetFilter;
-  const normalizedName = type === "certification" ? normalizeCertification(name) : normalizeSkill(name);
-  return filter?.type === type
-    && filter?.key === key
+  const normalizedName = normalizeFacetName(name, type);
+  return state.activeFacetFilters.some((filter) => isSameFacetFilter(filter, type, key, normalizedName));
+}
+
+function isSameFacetFilter(filter, type, key, normalizedName) {
+  return filter.type === type
+    && filter.key === key
     && filter.normalizedName === normalizedName.toLowerCase();
+}
+
+function normalizeFacetName(name, type) {
+  return type === "certification" ? normalizeCertification(name) : normalizeSkill(name);
+}
+
+function countActiveFilters(type) {
+  return state.activeFacetFilters.filter((filter) => filter.type === type).length;
 }
 
 function renderJobList(container, jobs) {
@@ -859,21 +885,70 @@ function renderJobList(container, jobs) {
 
   jobs.forEach((job) => {
     const card = els.template.content.firstElementChild.cloneNode(true);
-    card.querySelector("h3").textContent = job.title || "職種名未取得";
-    card.querySelector(".company").textContent = job.company || "企業名未設定";
-    card.querySelector(".income").textContent = job.annualIncomeRaw || "年収未取得";
-    card.querySelector(".description").textContent = job.description || "業務内容未取得";
+    const highlightTerms = getHighlightTerms();
+    setHighlightedText(card.querySelector("h3"), job.title || "職種名未取得", highlightTerms);
+    setHighlightedText(card.querySelector(".company"), job.company || "企業名未設定", highlightTerms);
+    setHighlightedText(card.querySelector(".income"), job.annualIncomeRaw || "年収未取得", highlightTerms);
+    renderMatchSummary(card.querySelector(".match-summary"), getJobMatchSummary(job, highlightTerms));
+    setHighlightedText(card.querySelector(".description"), job.description || "業務内容未取得", highlightTerms);
     renderJobMeta(card.querySelector(".job-meta"), job);
-    card.querySelector(".required").textContent = (job.requiredSkills || []).join(", ") || "-";
-    card.querySelector(".preferred").textContent = (job.preferredSkills || []).join(", ") || "-";
-    renderCertificationTags(card.querySelector(".certifications"), getJobCertifications(job));
-    card.querySelector(".notes").textContent = job.notes || "";
+    renderHighlightedList(card.querySelector(".required"), job.requiredSkills || [], highlightTerms);
+    renderHighlightedList(card.querySelector(".preferred"), job.preferredSkills || [], highlightTerms);
+    renderCertificationTags(card.querySelector(".certifications"), getJobCertifications(job), highlightTerms);
+    setHighlightedText(card.querySelector(".notes"), job.notes || "", highlightTerms);
     const source = card.querySelector(".source");
     const hasSourcePage = job.sourceUrl && !job.sourceUrl.startsWith("manual:");
     source.href = hasSourcePage ? job.sourceUrl : "#";
     source.hidden = !hasSourcePage;
     container.appendChild(card);
   });
+}
+
+function getHighlightTerms() {
+  const query = els.searchInput.value.trim();
+  return [...new Set([
+    ...state.activeFacetFilters.map((filter) => filter.name),
+    query,
+    ...query.split(/\s+/)
+  ].map(cleanText).filter(Boolean))];
+}
+
+function renderMatchSummary(container, matches) {
+  container.innerHTML = "";
+  container.hidden = matches.length === 0;
+  matches.forEach(({ label, terms }) => {
+    const item = document.createElement("span");
+    item.textContent = `${label}: ${terms.join(" / ")}`;
+    container.appendChild(item);
+  });
+}
+
+function getJobMatchSummary(job, terms) {
+  if (!terms.length) return [];
+  const fields = [
+    ["職種", [job.title]],
+    ["企業", [job.company]],
+    ["年収", [job.annualIncomeRaw]],
+    ["職務内容", [job.description]],
+    ["勤務地", [job.location]],
+    ["必須", job.requiredSkills || []],
+    ["推奨", job.preferredSkills || []],
+    ["資格", getJobCertifications(job)],
+    ["備考", [job.notes, job.appealPoints, job.requiredCertifications, job.preferredCertifications]]
+  ];
+
+  return fields
+    .map(([label, values]) => ({
+      label,
+      terms: terms.filter((term) => values.some((value) => textContainsTerm(value, term))).slice(0, 4)
+    }))
+    .filter((item) => item.terms.length);
+}
+
+function textContainsTerm(value, term) {
+  const normalizedValue = normalizeSkill(value).toLowerCase();
+  const normalizedTerm = normalizeSkill(term).toLowerCase();
+  return normalizedValue.includes(normalizedTerm);
 }
 
 function getJobCertifications(job) {
@@ -884,7 +959,7 @@ function getJobCertifications(job) {
   ].map(normalizeCertification).filter(Boolean))];
 }
 
-function renderCertificationTags(container, certifications) {
+function renderCertificationTags(container, certifications, highlightTerms = []) {
   container.innerHTML = "";
   container.classList.toggle("certification-tags", certifications.length > 0);
   if (!certifications.length) {
@@ -893,9 +968,63 @@ function renderCertificationTags(container, certifications) {
   }
   certifications.forEach((certification) => {
     const tag = document.createElement("span");
-    tag.textContent = certification;
+    setHighlightedText(tag, certification, highlightTerms);
     container.appendChild(tag);
   });
+}
+
+function renderHighlightedList(container, values, highlightTerms = []) {
+  container.innerHTML = "";
+  if (!values.length) {
+    container.textContent = "-";
+    return;
+  }
+  values.forEach((value, index) => {
+    if (index > 0) container.appendChild(document.createTextNode(", "));
+    const item = document.createElement("span");
+    setHighlightedText(item, value, highlightTerms);
+    container.appendChild(item);
+  });
+}
+
+function setHighlightedText(element, value, highlightTerms = []) {
+  element.innerHTML = "";
+  const text = String(value || "");
+  const terms = normalizeHighlightTerms(highlightTerms);
+  if (!text || !terms.length) {
+    element.textContent = text;
+    return;
+  }
+
+  const pattern = new RegExp(`(${terms.map(escapeRegExp).join("|")})`, "gi");
+  let lastIndex = 0;
+  text.replace(pattern, (match, _term, offset) => {
+    if (offset > lastIndex) {
+      element.appendChild(document.createTextNode(text.slice(lastIndex, offset)));
+    }
+    const mark = document.createElement("mark");
+    mark.textContent = match;
+    element.appendChild(mark);
+    lastIndex = offset + match.length;
+    return match;
+  });
+  if (lastIndex < text.length) {
+    element.appendChild(document.createTextNode(text.slice(lastIndex)));
+  }
+}
+
+function normalizeHighlightTerms(terms) {
+  const seen = new Set();
+  return terms
+    .map(cleanText)
+    .filter((term) => term.length >= 2)
+    .sort((a, b) => b.length - a.length)
+    .filter((term) => {
+      const key = term.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 function renderJobMeta(container, job) {
@@ -913,12 +1042,10 @@ function renderJobMeta(container, job) {
 }
 
 function filterJobs(jobs) {
-  if (state.activeFacetFilter) {
-    return filterJobsByFacet(jobs, state.activeFacetFilter);
-  }
+  const facetFiltered = state.activeFacetFilters.reduce(filterJobsByFacet, jobs);
   const query = els.searchInput.value.trim().toLowerCase();
-  if (!query) return jobs;
-  return jobs.filter((job) => [
+  if (!query) return facetFiltered;
+  return facetFiltered.filter((job) => [
     job.company,
     job.title,
     job.description,

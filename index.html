@@ -47,10 +47,13 @@
             <section class="panel">
               <div class="panel-head">
                 <h2>必須スキル傾向</h2>
-                <select id="skillTypeFilter" aria-label="スキル種別">
-                  <option value="required">必須</option>
-                  <option value="preferred">推奨</option>
-                </select>
+                <div class="panel-actions">
+                  <button id="resetSkillFilters" class="ghost-button compact-button" type="button" hidden>スキル条件リセット</button>
+                  <select id="skillTypeFilter" aria-label="スキル種別">
+                    <option value="required">必須</option>
+                    <option value="preferred">推奨</option>
+                  </select>
+                </div>
               </div>
               <div id="skillChart" class="skill-chart empty">データがありません</div>
             </section>
@@ -58,6 +61,7 @@
             <section class="panel compact-panel">
               <div class="panel-head">
                 <h2>資格傾向</h2>
+                <button id="resetCertificationFilters" class="ghost-button compact-button" type="button" hidden>資格条件リセット</button>
               </div>
               <div id="certificationChart" class="skill-chart certification-cloud empty">データがありません</div>
             </section>
@@ -196,6 +200,7 @@
           </div>
           <span class="income"></span>
         </div>
+        <div class="match-summary" hidden></div>
         <p class="description"></p>
         <div class="job-meta"></div>
         <dl class="skill-block">
