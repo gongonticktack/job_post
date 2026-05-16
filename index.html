@@ -36,6 +36,10 @@
             <span>企業数</span>
             <strong id="companyCount">0</strong>
           </article>
+          <article class="metric representative-companies">
+            <span>代表企業</span>
+            <div id="representativeCompanies" class="representative-list">-</div>
+          </article>
           <article class="metric">
             <span>平均年収</span>
             <strong id="avgIncome">-</strong>
@@ -201,7 +205,6 @@
           <span class="income"></span>
         </div>
         <div class="match-summary" hidden></div>
-        <p class="description"></p>
         <div class="job-meta"></div>
         <dl class="skill-block">
           <div>
@@ -217,7 +220,17 @@
             <dd class="certifications"></dd>
           </div>
         </dl>
-        <p class="notes"></p>
+        <details class="job-detail-block">
+          <summary>職務内容・補足</summary>
+          <section>
+            <h4>職務内容</h4>
+            <p class="description"></p>
+          </section>
+          <section>
+            <h4>補足</h4>
+            <p class="notes"></p>
+          </section>
+        </details>
         <a class="source" target="_blank" rel="noreferrer">求人ページ</a>
       </article>
     </template>

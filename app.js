@@ -41,6 +41,7 @@ const els = {
   views: document.querySelectorAll(".view"),
   jobCount: document.querySelector("#jobCount"),
   companyCount: document.querySelector("#companyCount"),
+  representativeCompanies: document.querySelector("#representativeCompanies"),
   avgIncome: document.querySelector("#avgIncome"),
   skillTypeFilter: document.querySelector("#skillTypeFilter"),
   resetSkillFilters: document.querySelector("#resetSkillFilters"),
@@ -688,15 +689,42 @@ function updateCompanyOptions() {
 }
 
 function renderMetrics(jobs) {
-  const companies = new Set(jobs.map((job) => normalizeCompanyKey(canonicalCompanyName(job.company))).filter(Boolean));
+  const companyCounts = countCompanies(jobs);
   const incomeValues = jobs.map(getJobAverageIncome).filter(Number.isFinite);
   const avg = incomeValues.length
     ? Math.round(incomeValues.reduce((sum, value) => sum + value, 0) / incomeValues.length)
     : null;
 
   els.jobCount.textContent = jobs.length;
-  els.companyCount.textContent = companies.size;
+  els.companyCount.textContent = companyCounts.length;
+  renderRepresentativeCompanies(companyCounts);
   els.avgIncome.textContent = avg ? `${avg}万円` : "-";
+}
+
+function countCompanies(jobs) {
+  const map = new Map();
+  jobs.forEach((job) => {
+    const company = canonicalCompanyName(job.company || "");
+    const key = normalizeCompanyKey(company);
+    if (!key) return;
+    const current = map.get(key) || { name: company, count: 0 };
+    current.count += 1;
+    map.set(key, current);
+  });
+  return [...map.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ja"));
+}
+
+function renderRepresentativeCompanies(companyCounts) {
+  els.representativeCompanies.innerHTML = "";
+  if (!companyCounts.length) {
+    els.representativeCompanies.textContent = "-";
+    return;
+  }
+  companyCounts.slice(0, 5).forEach(({ name, count }) => {
+    const item = document.createElement("span");
+    item.textContent = `${name} ${count}`;
+    els.representativeCompanies.appendChild(item);
+  });
 }
 
 function getJobAverageIncome(job) {
@@ -815,10 +843,16 @@ function getWordCategoryClass(name, type, meta = {}) {
     "品質保証", "qa", "テスト自動化", "アジャイル", "スクラム", "ウォーターフォール", "api設計"
   ])) return "word-process";
   if (matchesTerm(value, [
-    "プロジェクトマネジメント", "ステークホルダーマネジメント", "チームリード", "qcd", "顧客折衝",
-    "pl", "pm", "pmo", "wbs", "課題管理", "リスク管理", "進捗管理", "予算管理",
-    "ベンダーマネジメント", "ベンダーコントロール", "ピープルマネジメント", "プロダクトマネジメント",
-    "プロダクトオーナー", "pdm", "po", "チームマネジメント"
+    "プロジェクトマネジメント", "ステークホルダーマネジメント", "チームリード", "チームリーダー",
+    "リーダー", "リーダーシップ", "テックリード", "リードエンジニア", "エンジニアリングマネージャー",
+    "プロジェクトリーダー", "プロジェクトマネージャー", "プロジェクト推進", "サブリーダー",
+    "マネジメント", "メンバーマネジメント", "ラインマネジメント", "組織マネジメント",
+    "qcd", "顧客折衝", "pl", "pm", "pmo", "wbs", "課題管理", "リスク管理", "進捗管理",
+    "予算管理", "要員管理", "体制構築", "チームビルディング", "ベンダーマネジメント",
+    "ベンダー管理", "ベンダーコントロール", "パートナー管理", "パートナー折衝",
+    "ピープルマネジメント", "プロダクトマネジメント", "プロダクトオーナー",
+    "プロダクトオーナーシップ", "プロダクト責任者", "プロダクト企画", "ロードマップ策定",
+    "pdm", "po", "チームマネジメント"
   ])) return "word-management";
   if (matchesTerm(value, [
     "セキュリティ", "ゼロトラスト", "認証", "認可", "oauth", "oidc", "saml", "active directory", "entra id"
@@ -901,18 +935,31 @@ function renderJobList(container, jobs) {
     setHighlightedText(card.querySelector(".company"), job.company || "企業名未設定", highlightTerms);
     setHighlightedText(card.querySelector(".income"), job.annualIncomeRaw || "年収未取得", highlightTerms);
     renderMatchSummary(card.querySelector(".match-summary"), getJobMatchSummary(job, highlightTerms));
-    setHighlightedText(card.querySelector(".description"), job.description || "業務内容未取得", highlightTerms);
+    renderJobDetails(card, job, highlightTerms);
     renderJobMeta(card.querySelector(".job-meta"), job);
     renderHighlightedList(card.querySelector(".required"), job.requiredSkills || [], highlightTerms);
     renderHighlightedList(card.querySelector(".preferred"), job.preferredSkills || [], highlightTerms);
     renderCertificationTags(card.querySelector(".certifications"), getJobCertifications(job), highlightTerms);
-    setHighlightedText(card.querySelector(".notes"), job.notes || "", highlightTerms);
     const source = card.querySelector(".source");
     const hasSourcePage = job.sourceUrl && !job.sourceUrl.startsWith("manual:");
     source.href = hasSourcePage ? job.sourceUrl : "#";
     source.hidden = !hasSourcePage;
     container.appendChild(card);
   });
+}
+
+function renderJobDetails(card, job, highlightTerms) {
+  const detailBlock = card.querySelector(".job-detail-block");
+  const descriptionSection = card.querySelector(".description").closest("section");
+  const notesSection = card.querySelector(".notes").closest("section");
+  const description = job.description || "";
+  const notes = job.notes || "";
+
+  detailBlock.hidden = !description && !notes;
+  descriptionSection.hidden = !description;
+  notesSection.hidden = !notes;
+  setHighlightedText(card.querySelector(".description"), description, highlightTerms);
+  setHighlightedText(card.querySelector(".notes"), notes, highlightTerms);
 }
 
 function getHighlightTerms() {
@@ -1291,7 +1338,30 @@ async function handleManualPreview(event) {
   state.manualDraft = job;
   renderJobList(els.manualPreview, [job]);
   renderManualEditor(job);
+  const duplicate = findDuplicateSkillProfileJob(job);
+  if (duplicate) {
+    setInputStatus(`警告: 必須スキル・推奨スキル・資格が同じ求人が既にあります（${duplicate.company || "企業名未設定"} / ${duplicate.title || "職種名未取得"}）。同じ求人票を再入力している可能性があります。`);
+    return;
+  }
   setInputStatus("解析しました。必要に応じて編集してから保存してください。");
+}
+
+function findDuplicateSkillProfileJob(targetJob) {
+  const targetProfile = getSkillProfileKey(targetJob);
+  if (!targetProfile) return null;
+  return state.jobs.find((job) => getSkillProfileKey(job) === targetProfile) || null;
+}
+
+function getSkillProfileKey(job) {
+  const required = normalizeProfileList(job.requiredSkills || [], normalizeSavedSkill);
+  const preferred = normalizeProfileList(job.preferredSkills || [], normalizeSavedSkill);
+  const certifications = normalizeProfileList(getJobCertifications(job), normalizeCertification);
+  if (!required.length && !preferred.length && !certifications.length) return "";
+  return JSON.stringify({ required, preferred, certifications });
+}
+
+function normalizeProfileList(values, normalizer) {
+  return [...new Set(values.map(normalizer).filter(Boolean).map((value) => value.toLowerCase()))].sort();
 }
 
 async function saveManualDraft() {
