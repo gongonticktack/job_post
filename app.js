@@ -4,12 +4,35 @@ const DB_NAME = "job-post-analytics";
 const DB_VERSION = 1;
 const STORE = "jobs";
 const DICTIONARY_STORAGE_KEY = "job-post-dictionaries";
+const CERTIFICATION_ALIASES = {
+  "project management professional": "PMP",
+  "project manager professional": "PMP",
+  "pmp": "PMP",
+  "aws certified solutions architect - associate": "AWS Certified Solutions Architect",
+  "aws certified solutions architect associate": "AWS Certified Solutions Architect",
+  "aws solutions architect": "AWS Certified Solutions Architect",
+  "csm": "Certified ScrumMaster",
+  "cspo": "Certified Scrum Product Owner",
+  "psm": "Professional Scrum Master",
+  "pspo": "Professional Scrum Product Owner",
+  "itil foundation": "ITIL",
+  "プロジェクトマネージャ": "プロジェクトマネージャ試験",
+  "プロジェクトマネージャ試験": "プロジェクトマネージャ試験",
+  "システムアーキテクト": "システムアーキテクト試験",
+  "システムアーキテクト試験": "システムアーキテクト試験",
+  "データベース": "データベーススペシャリスト",
+  "データベーススペシャリスト": "データベーススペシャリスト",
+  "ネットワーク": "ネットワークスペシャリスト",
+  "ネットワークスペシャリスト": "ネットワークスペシャリスト"
+};
+const EXCLUDED_CERTIFICATIONS = new Set(["ipa", "情報処理技術者"]);
 
 const state = {
   jobs: [],
   db: null,
   supabase: null,
-  manualDraft: null
+  manualDraft: null,
+  activeFacetFilter: null
 };
 
 const els = {
@@ -65,14 +88,23 @@ function bindEvents() {
     tab.addEventListener("click", () => switchView(tab.dataset.view));
   });
   els.settingsButton.addEventListener("click", () => switchView("settings"));
-  els.skillTypeFilter.addEventListener("change", render);
-  els.searchInput.addEventListener("input", render);
+  els.skillTypeFilter.addEventListener("change", () => {
+    if (state.activeFacetFilter?.type === "skill") {
+      clearFacetFilter();
+      els.searchInput.value = "";
+    }
+    render();
+  });
+  els.searchInput.addEventListener("input", () => {
+    clearFacetFilter();
+    render();
+  });
   [els.skillChart, els.certificationChart].forEach((chart) => {
     chart.addEventListener("click", (event) => {
-      if (event.target === chart && els.searchInput.value.trim()) {
-        els.searchInput.value = "";
-        render();
-      }
+      if (event.target !== chart || (!els.searchInput.value.trim() && !state.activeFacetFilter)) return;
+      clearFacetFilter();
+      els.searchInput.value = "";
+      render();
     });
   });
   syncCompanySelect(els.crawlCompanySelect, els.companyName);
@@ -101,6 +133,7 @@ async function loadDictionarySettings() {
       if (remote.skillDictionary.length) config.skillDictionary = remote.skillDictionary;
       if (remote.certificationDictionary.length) config.certificationDictionary = remote.certificationDictionary;
       config.dictionaryMeta = remote.dictionaryMeta;
+      normalizeLoadedCertificationDictionary(config);
       return;
     } catch (error) {
       console.warn("dictionary settings remote load failed", error);
@@ -114,6 +147,13 @@ async function loadDictionarySettings() {
   } catch (error) {
     console.warn("dictionary settings load failed", error);
   }
+  normalizeLoadedCertificationDictionary(config);
+}
+
+function normalizeLoadedCertificationDictionary(config) {
+  config.certificationDictionary = [...new Set((config.certificationDictionary || [])
+    .map(normalizeCertification)
+    .filter(Boolean))];
 }
 
 async function loadParserSettings() {
@@ -605,8 +645,8 @@ function render() {
   updateCompanyOptions();
   const visibleJobs = filterJobs(state.jobs);
   renderMetrics(visibleJobs);
-  renderSkillChart();
-  renderCertificationChart();
+  renderSkillChart(visibleJobs);
+  renderCertificationChart(visibleJobs);
   renderJobList(els.jobList, visibleJobs);
   renderSettingsJobList();
 }
@@ -657,9 +697,9 @@ function getJobAverageIncome(job) {
   return null;
 }
 
-function renderSkillChart() {
+function renderSkillChart(jobs) {
   const key = els.skillTypeFilter.value === "preferred" ? "preferredSkills" : "requiredSkills";
-  const counts = countSkills(state.jobs, key);
+  const counts = countSkills(jobs, key);
   els.skillChart.innerHTML = "";
   els.skillChart.classList.toggle("empty", counts.length === 0);
   els.skillChart.classList.toggle("word-cloud", counts.length > 0);
@@ -668,11 +708,11 @@ function renderSkillChart() {
     return;
   }
 
-  renderWordCloud(els.skillChart, counts, 36, "skill");
+  renderWordCloud(els.skillChart, counts, 36, "skill", key);
 }
 
-function renderCertificationChart() {
-  const counts = countCertifications(state.jobs);
+function renderCertificationChart(jobs) {
+  const counts = countCertifications(jobs);
   els.certificationChart.innerHTML = "";
   els.certificationChart.classList.toggle("empty", counts.length === 0);
   els.certificationChart.classList.toggle("word-cloud", counts.length > 0);
@@ -683,7 +723,7 @@ function renderCertificationChart() {
   renderWordCloud(els.certificationChart, counts, 28, "certification");
 }
 
-function renderWordCloud(container, counts, limit, type = "skill") {
+function renderWordCloud(container, counts, limit, type = "skill", key = "") {
   const max = counts[0].count;
   counts.slice(0, limit).forEach(({ name, count }, index) => {
     const weight = count <= 1 || max <= 1 ? 0 : (count - 1) / (max - 1);
@@ -698,9 +738,14 @@ function renderWordCloud(container, counts, limit, type = "skill") {
     item.style.setProperty("--delay", `${index * 16}ms`);
     item.title = `${name}: ${count}件`;
     item.textContent = name;
-    item.classList.toggle("is-filtering", isCurrentFilter(name));
+    item.classList.toggle("is-filtering", isCurrentFacetFilter(name, type, key));
     item.addEventListener("click", () => {
-      els.searchInput.value = isCurrentFilter(name) ? "" : name;
+      if (isCurrentFacetFilter(name, type, key)) {
+        clearFacetFilter();
+        els.searchInput.value = "";
+      } else {
+        setFacetFilter(name, type, key);
+      }
       render();
     });
     const badge = document.createElement("span");
@@ -779,8 +824,27 @@ function colorToRgb(color) {
   ].join(", ");
 }
 
-function isCurrentFilter(name) {
-  return els.searchInput.value.trim().toLowerCase() === name.toLowerCase();
+function setFacetFilter(name, type, key = "") {
+  const normalizedName = type === "certification" ? normalizeCertification(name) : normalizeSkill(name);
+  state.activeFacetFilter = {
+    name,
+    normalizedName: normalizedName.toLowerCase(),
+    type,
+    key
+  };
+  els.searchInput.value = name;
+}
+
+function clearFacetFilter() {
+  state.activeFacetFilter = null;
+}
+
+function isCurrentFacetFilter(name, type, key = "") {
+  const filter = state.activeFacetFilter;
+  const normalizedName = type === "certification" ? normalizeCertification(name) : normalizeSkill(name);
+  return filter?.type === type
+    && filter?.key === key
+    && filter.normalizedName === normalizedName.toLowerCase();
 }
 
 function renderJobList(container, jobs) {
@@ -817,7 +881,7 @@ function getJobCertifications(job) {
     ...extractCertificationsFromText(job.requiredCertifications || ""),
     ...extractCertificationsFromText(job.preferredCertifications || ""),
     ...extractCertificationsFromText(job.notes || "")
-  ].map(normalizeSkill).filter(Boolean))];
+  ].map(normalizeCertification).filter(Boolean))];
 }
 
 function renderCertificationTags(container, certifications) {
@@ -849,6 +913,9 @@ function renderJobMeta(container, job) {
 }
 
 function filterJobs(jobs) {
+  if (state.activeFacetFilter) {
+    return filterJobsByFacet(jobs, state.activeFacetFilter);
+  }
   const query = els.searchInput.value.trim().toLowerCase();
   if (!query) return jobs;
   return jobs.filter((job) => [
@@ -866,12 +933,27 @@ function filterJobs(jobs) {
   ].join(" ").toLowerCase().includes(query));
 }
 
+function filterJobsByFacet(jobs, filter) {
+  if (filter.type === "certification") {
+    return jobs.filter((job) => getJobCertifications(job)
+      .some((certification) => normalizeCertification(certification).toLowerCase() === filter.normalizedName));
+  }
+
+  if (filter.type === "skill" && filter.key) {
+    return jobs.filter((job) => (job[filter.key] || [])
+      .some((skill) => normalizeSkill(skill).toLowerCase() === filter.normalizedName));
+  }
+
+  return jobs;
+}
+
 function countSkills(jobs, key) {
   const map = new Map();
-  jobs.flatMap((job) => job[key] || []).forEach((skill) => {
-    const normalized = normalizeSkill(skill);
-    if (!normalized) return;
-    map.set(normalized, (map.get(normalized) || 0) + 1);
+  jobs.forEach((job) => {
+    const jobSkills = new Set((job[key] || []).map(normalizeSkill).filter(Boolean));
+    jobSkills.forEach((skill) => {
+      map.set(skill, (map.get(skill) || 0) + 1);
+    });
   });
   return [...map.entries()]
     .map(([name, count]) => ({ name, count }))
@@ -880,10 +962,11 @@ function countSkills(jobs, key) {
 
 function countCertifications(jobs) {
   const map = new Map();
-  jobs.flatMap(getJobCertifications).forEach((certification) => {
-    const normalized = normalizeSkill(certification);
-    if (!normalized) return;
-    map.set(normalized, (map.get(normalized) || 0) + 1);
+  jobs.forEach((job) => {
+    const jobCertifications = new Set(getJobCertifications(job).map(normalizeCertification).filter(Boolean));
+    jobCertifications.forEach((certification) => {
+      map.set(certification, (map.get(certification) || 0) + 1);
+    });
   });
   return [...map.entries()]
     .map(([name, count]) => ({ name, count }))
@@ -1115,8 +1198,13 @@ function parseManualJobText(text, fallbackCompany) {
   const description = pickSection(normalized, headings.description, parser) || "";
   const appealPoints = pickSection(normalized, headings.appealPoints, parser) || "";
   const referenceInfo = pickSection(normalized, headings.referenceInfo, parser) || "";
-  const requiredSkillsRaw = pickSection(normalized, headings.requiredSkills, parser);
-  const preferredSkillsRaw = pickSection(normalized, headings.preferredSkills, parser);
+  let requiredSkillsRaw = pickSection(normalized, headings.requiredSkills, parser);
+  let preferredSkillsRaw = pickSection(normalized, headings.preferredSkills, parser);
+  if (company === "NEC") {
+    const necQualifications = extractNecQualificationBlocks(normalized);
+    requiredSkillsRaw = necQualifications.must || requiredSkillsRaw;
+    preferredSkillsRaw = necQualifications.want || preferredSkillsRaw;
+  }
   const requiredLanguage = pickSection(normalized, headings.requiredLanguage, parser);
   const requiredCertifications = pickSection(normalized, headings.requiredCertifications, parser);
   const preferredLanguage = pickSection(normalized, headings.preferredLanguage, parser);
@@ -1147,6 +1235,42 @@ function parseManualJobText(text, fallbackCompany) {
     inputMethod: "manual",
     sourceUrl: `manual:${hashText(`${company}\n${title}\n${normalized.slice(0, 200)}`)}`,
     crawledAt: new Date().toISOString()
+  };
+}
+
+function extractNecQualificationBlocks(text) {
+  const blocks = { must: [], want: [] };
+  let current = "";
+  let hasCurrentContent = false;
+  const stopPattern = /^(待遇 \/ Salary & Benefits|勤務地 \/ Location|備考 \/ Notes|【求める人物像・ソフトスキル】|【採用形態・ランク】|【想定報酬】)$/;
+  const rankPattern = /^(主任の場合|プロフェッショナル（課長相当）の場合)$/;
+
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (stopPattern.test(line)) break;
+    if (line === "【MUST】") {
+      current = "must";
+      hasCurrentContent = false;
+      continue;
+    }
+    if (line === "【WANT】") {
+      current = "want";
+      hasCurrentContent = false;
+      continue;
+    }
+    if (rankPattern.test(line)) {
+      if (hasCurrentContent) current = "";
+      continue;
+    }
+    if (!current) continue;
+    blocks[current].push(line);
+    hasCurrentContent = true;
+  }
+
+  return {
+    must: cleanText(blocks.must.join("\n")),
+    want: cleanText(blocks.want.join("\n"))
   };
 }
 
@@ -1405,7 +1529,18 @@ function isSkillLikeText(item, ignorePattern) {
 function extractCertificationsFromText(raw) {
   if (!raw) return [];
   const dictionary = window.JobParserConfig?.certificationDictionary || [];
-  return [...new Set(dictionary.filter((name) => new RegExp(escapeRegExp(name), "i").test(raw)))];
+  return [...new Set(dictionary
+    .filter((name) => new RegExp(escapeRegExp(name), "i").test(raw))
+    .map(normalizeCertification)
+    .filter(Boolean))];
+}
+
+function normalizeCertification(certification) {
+  const normalized = normalizeSkill(certification);
+  if (!normalized) return "";
+  const key = normalized.toLowerCase();
+  if (EXCLUDED_CERTIFICATIONS.has(key)) return "";
+  return CERTIFICATION_ALIASES[key] || normalized;
 }
 
 function hashText(text) {

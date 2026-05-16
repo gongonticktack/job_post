@@ -163,8 +163,8 @@ window.JobParserConfig = {
     "官公庁", "公共", "社会保障", "顧客課題", "顧客ニーズ", "クラウドネイティブ"
   ],
   certificationDictionary: [
-    "PMP", "IPA", "情報処理技術者", "プロジェクトマネージャ", "システムアーキテクト", "データベース",
-    "ネットワーク", "情報処理安全確保支援士", "ASCM", "CPIM", "CSCP", "CLTD",
+    "PMP", "プロジェクトマネージャ試験", "システムアーキテクト試験", "データベーススペシャリスト",
+    "ネットワークスペシャリスト", "情報処理安全確保支援士", "ASCM", "CPIM", "CSCP", "CLTD",
     "SAP S/4HANA", "Oracle Cloud SCM", "Kinaxis Maestro", "Anaplan", "mcframe",
     "応用情報技術者", "基本情報技術者", "AWS Certified Solutions Architect",
     "AWS Certified Developer", "AWS Certified SysOps Administrator",
@@ -179,6 +179,6 @@ window.JobParserConfig = {
     "Google Cloud Professional Cloud Developer", "Google Cloud Professional Cloud DevOps Engineer",
     "Oracle Certified Java Programmer", "Oracle Certified Professional",
     "Oracle Master", "CCNA", "CCNP", "LPIC", "LinuC", "CISSP", "CISA", "CISM",
-    "CompTIA Security+", "Project Management Professional", "簿記", "簿記3級", "簿記2級"
+    "CompTIA Security+", "簿記", "簿記3級", "簿記2級"
   ]
 };
