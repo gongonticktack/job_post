@@ -1574,7 +1574,7 @@ function getCompanyParser(company) {
 }
 
 function detectCompanyFromText(text, fallbackCompany) {
-  if (/株式会社NTTデータ|NTT\s*DATA/i.test(text)) return canonicalCompanyName("株式会社NTTデータ");
+  if (/株式会社NTTデータ|NTTデータ株式会社|NTT\s*データ|NTT\s*DATA/i.test(text)) return canonicalCompanyName("株式会社NTTデータ");
   if (/富士通株式会社|Fujitsu/i.test(text)) return canonicalCompanyName("富士通株式会社");
   if (/日本電気株式会社|\bNEC\b|医療DX|厚生労働省/.test(text)) return canonicalCompanyName("NEC");
   if (/EC本部|トヨタ自動車|トヨタグループ|Teamcenter|TargetLink/.test(text)) {
