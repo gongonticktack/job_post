@@ -594,7 +594,7 @@ function cleanJobIncome(job) {
 
 function cleanSkillList(skills, parser) {
   const ignorePattern = new RegExp(parser.ignoreSkillPatterns?.join("|") || "$^");
-  return [...new Set(skills.map(normalizeSkill).filter((skill) => isSavedSkillValid(skill, ignorePattern)))];
+  return [...new Set(skills.map(normalizeSavedSkill).filter((skill) => isSavedSkillValid(skill, ignorePattern)))];
 }
 
 function isSavedSkillValid(skill, ignorePattern) {
@@ -719,7 +719,7 @@ function renderSkillChart(jobs) {
     return;
   }
 
-  renderWordCloud(els.skillChart, counts, 36, "skill", key);
+  renderWordCloud(els.skillChart, counts, "skill", key);
 }
 
 function renderCertificationChart(jobs) {
@@ -731,12 +731,14 @@ function renderCertificationChart(jobs) {
     els.certificationChart.textContent = "データがありません";
     return;
   }
-  renderWordCloud(els.certificationChart, counts, 28, "certification");
+  renderWordCloud(els.certificationChart, counts, "certification");
 }
 
-function renderWordCloud(container, counts, limit, type = "skill", key = "") {
+function renderWordCloud(container, counts, type = "skill", key = "") {
   const max = counts[0].count;
-  counts.slice(0, limit).forEach(({ name, count }, index) => {
+  const visibleCounts = prioritizeSelectedCounts(counts, type, key);
+  visibleCounts.forEach(({ name, count }, index) => {
+    const selected = isCurrentFacetFilter(name, type, key);
     const weight = count <= 1 || max <= 1 ? 0 : (count - 1) / (max - 1);
     const meta = getDictionaryMeta(name, type);
     const item = document.createElement("button");
@@ -744,12 +746,12 @@ function renderWordCloud(container, counts, limit, type = "skill", key = "") {
     item.type = "button";
     const rgb = colorToRgb(meta.color);
     if (rgb) item.style.setProperty("--word-rgb", rgb);
-    item.style.setProperty("--size", `${12 + weight * 30}px`);
+    item.style.setProperty("--size", selected ? "17px" : `${12 + weight * 30}px`);
     item.style.setProperty("--alpha", `${0.46 + weight * 0.54}`);
     item.style.setProperty("--delay", `${index * 16}ms`);
     item.title = `${name}: ${count}件`;
     item.textContent = name;
-    item.classList.toggle("is-filtering", isCurrentFacetFilter(name, type, key));
+    item.classList.toggle("is-filtering", selected);
     item.addEventListener("click", () => {
       toggleFacetFilter(name, type, key);
       render();
@@ -758,6 +760,15 @@ function renderWordCloud(container, counts, limit, type = "skill", key = "") {
     badge.textContent = count;
     item.appendChild(badge);
     container.appendChild(item);
+  });
+}
+
+function prioritizeSelectedCounts(counts, type, key = "") {
+  return [...counts].sort((a, b) => {
+    const leftSelected = isCurrentFacetFilter(a.name, type, key);
+    const rightSelected = isCurrentFacetFilter(b.name, type, key);
+    if (leftSelected !== rightSelected) return leftSelected ? -1 : 1;
+    return b.count - a.count || a.name.localeCompare(b.name, "ja");
   });
 }
 
@@ -1077,7 +1088,7 @@ function filterJobsByFacet(jobs, filter) {
 function countSkills(jobs, key) {
   const map = new Map();
   jobs.forEach((job) => {
-    const jobSkills = new Set((job[key] || []).map(normalizeSkill).filter(Boolean));
+    const jobSkills = new Set((job[key] || []).map(normalizeSavedSkill).filter(Boolean));
     jobSkills.forEach((skill) => {
       map.set(skill, (map.get(skill) || 0) + 1);
     });
@@ -1479,7 +1490,7 @@ function clearManualInput() {
 
 function splitEditorList(value, parser = getCompanyParser()) {
   const ignorePattern = new RegExp(parser.ignoreSkillPatterns?.join("|") || "$^");
-  return [...new Set(value.split(/\n|,|、/).map(normalizeSkill).filter((skill) => isSavedSkillValid(skill, ignorePattern)))];
+  return [...new Set(value.split(/\n|,|、/).map(normalizeSavedSkill).filter((skill) => isSavedSkillValid(skill, ignorePattern)))];
 }
 
 function getCompanyParser(company) {
@@ -1636,7 +1647,7 @@ function extractSkillsFromText(raw, parser = getCompanyParser()) {
     .split(/\n|・|●|■|,|、|;/)
     .map((item) => cleanText(item).replace(/^[\-\u30fb\s]+/, ""))
     .filter((item) => isSkillLikeText(item, ignorePattern));
-  return [...new Set([...found, ...bulletItems].map(normalizeSkill).filter(Boolean))].slice(0, 24);
+  return [...new Set([...found, ...bulletItems].map(normalizeSavedSkill).filter(Boolean))].slice(0, 24);
 }
 
 function isSkillLikeText(item, ignorePattern) {
@@ -1680,6 +1691,14 @@ function hashText(text) {
 
 function normalizeSkill(skill) {
   return cleanText(skill).replace(/経験$/, "").replace(/スキル$/, "").trim();
+}
+
+function normalizeSavedSkill(skill) {
+  const normalized = normalizeSkill(skill);
+  if (!normalized) return "";
+  const dictionary = window.JobParserConfig?.skillDictionary || [];
+  const matched = dictionary.find((term) => term.toLowerCase() === normalized.toLowerCase());
+  return matched || normalized;
 }
 
 function cleanText(value) {
