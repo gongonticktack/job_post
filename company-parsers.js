@@ -90,6 +90,37 @@ window.JobParserConfig = {
       ignoreSkillPatterns: [
         "必須", "歓迎", "経験", "ご経験", "お持ち", "方", "問いません", "勤務地", "待遇", "雇用", "試用期間"
       ]
+    },
+    "NEC": {
+      aliases: ["日本電気株式会社", "NEC Corporation", "日本電気"],
+      titlePattern: "^\\d+\\s+.+",
+      titleMatchIndex: 0,
+      headings: {
+        company: [],
+        description: ["【職務内容】"],
+        appealPoints: ["【ポジションのアピールポイント】"],
+        referenceInfo: ["【職場環境】", "備考 / Notes"],
+        requiredSkills: ["応募資格 / Qualifications"],
+        requiredLanguage: [],
+        requiredCertifications: ["応募資格 / Qualifications"],
+        preferredSkills: ["【WANT】"],
+        preferredLanguage: [],
+        preferredCertifications: ["【WANT】"],
+        income: ["【想定報酬】"],
+        location: ["勤務地 / Location"]
+      },
+      sectionHeadings: [
+        "職務内容 / Job duties", "応募資格 / Qualifications", "待遇 / Salary & Benefits",
+        "勤務地 / Location", "備考 / Notes",
+        "【事業・組織構成の概要】", "【職務内容】", "【ポジションのアピールポイント】",
+        "【職場環境】", "【求める人物像・ソフトスキル】",
+        "【採用形態・ランク】", "【想定報酬】"
+      ],
+      ignoreSkillPatterns: [
+        "必須", "歓迎", "経験", "資格", "主任", "プロフェッショナル", "課長相当",
+        "場合", "以下", "以上", "満たすこと", "勤務地", "待遇", "採用形態",
+        "求める人物像", "ソフトスキル", "前職年収", "当社規定", "個別相談"
+      ]
     }
   },
   skillDictionary: [
@@ -127,10 +158,12 @@ window.JobParserConfig = {
     "プロダクトマネジメント", "プロダクトオーナー", "PdM", "PO", "ITコンサル",
     "業務改善", "BPR", "ITIL", "インシデント管理", "SLA", "ITSM", "ゼロトラスト",
     "認証", "認可", "OAuth", "OIDC", "SAML", "Active Directory", "Entra ID",
-    "Windows Server", "VMware", "OpenShift", "EKS", "AKS", "Cloud Run", "Lambda"
+    "Windows Server", "VMware", "OpenShift", "EKS", "AKS", "Cloud Run", "Lambda",
+    "Aurora", "PoC", "フィジビリティ検証", "医療DX", "ガバメントクラウド",
+    "官公庁", "公共", "社会保障", "顧客課題", "顧客ニーズ", "クラウドネイティブ"
   ],
   certificationDictionary: [
-    "PMP", "IPA", "プロジェクトマネージャ", "システムアーキテクト", "データベース",
+    "PMP", "IPA", "情報処理技術者", "プロジェクトマネージャ", "システムアーキテクト", "データベース",
     "ネットワーク", "情報処理安全確保支援士", "ASCM", "CPIM", "CSCP", "CLTD",
     "SAP S/4HANA", "Oracle Cloud SCM", "Kinaxis Maestro", "Anaplan", "mcframe",
     "応用情報技術者", "基本情報技術者", "AWS Certified Solutions Architect",
