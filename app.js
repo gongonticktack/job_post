@@ -665,7 +665,7 @@ function renderFilterControls() {
 
 function updateCompanyOptions() {
   const parserCompanies = Object.keys(window.JobParserConfig?.companies || {});
-  const companies = [...new Set([...parserCompanies, ...state.jobs.map((job) => job.company).filter(Boolean), "NTT DATA"]
+  const companies = [...new Set([...parserCompanies, ...state.jobs.map((job) => job.company).filter(Boolean), "株式会社NTTデータ"]
     .map(canonicalCompanyName)
     .filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "ja"));
@@ -1575,7 +1575,7 @@ function getCompanyParser(company) {
 
 function detectCompanyFromText(text, fallbackCompany) {
   if (/株式会社NTTデータ|NTTデータ株式会社|NTT\s*データ|NTT\s*DATA/i.test(text)) return canonicalCompanyName("株式会社NTTデータ");
-  if (/富士通株式会社|Fujitsu/i.test(text)) return canonicalCompanyName("富士通株式会社");
+  if (/富士通株式会社|富士通\s*Japan\s*株式会社|Fujitsu\s*Japan|Fujitsu/i.test(text)) return canonicalCompanyName("富士通株式会社");
   if (/日本電気株式会社|\bNEC\b|医療DX|厚生労働省/.test(text)) return canonicalCompanyName("NEC");
   if (/EC本部|トヨタ自動車|トヨタグループ|Teamcenter|TargetLink/.test(text)) {
     return canonicalCompanyName("株式会社トヨタシステムズ");

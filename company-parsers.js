@@ -1,10 +1,10 @@
 "use strict";
 
 window.JobParserConfig = {
-  defaultCompany: "NTT DATA",
+  defaultCompany: "株式会社NTTデータ",
   companies: {
-    "NTT DATA": {
-      aliases: ["株式会社NTTデータ", "NTTデータ株式会社", "NTTデータ", "NTTData", "NTT Data"],
+    "株式会社NTTデータ": {
+      aliases: ["NTT DATA", "NTTデータ株式会社", "NTTデータ", "NTTData", "NTT Data"],
       titlePattern: "^【.+?】",
       titleMatchIndex: 1,
       headings: {
@@ -32,7 +32,7 @@ window.JobParserConfig = {
       ]
     },
     "富士通株式会社": {
-      aliases: ["富士通 株式会社"],
+      aliases: ["富士通 株式会社", "富士通Japan株式会社", "富士通JAPAN株式会社", "富士通Japan 株式会社", "Fujitsu Japan"],
       titlePattern: ".+",
       titleMatchIndex: 0,
       headings: {
