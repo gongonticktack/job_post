@@ -26,6 +26,15 @@ const CERTIFICATION_ALIASES = {
   "ネットワークスペシャリスト": "ネットワークスペシャリスト"
 };
 const EXCLUDED_CERTIFICATIONS = new Set(["ipa", "情報処理技術者"]);
+const EXCLUDED_SKILL_PATTERNS = [
+  /など$/,
+  /チーム$/,
+  /判断し$/,
+  /^【.+】/,
+  /【.+】/,
+  /^(言語|工程|役割|担当|業務|職務|チーム|部門|部署|組織)$/,
+  /(以下|上記|下記|経験|知識|スキル|条件|歓迎|必須|応募|求める|業務|職務|言語).{4,}/
+];
 
 const state = {
   jobs: [],
@@ -662,6 +671,7 @@ function isSavedSkillValid(skill, ignorePattern) {
   const dictionary = window.JobParserConfig?.skillDictionary || [];
   const normalized = normalizeSkill(skill);
   if (!normalized) return false;
+  if (isExcludedSkillText(normalized)) return false;
   if (dictionary.some((term) => term.toLowerCase() === normalized.toLowerCase())) return true;
   return isSkillLikeText(normalized, ignorePattern);
 }
@@ -2110,6 +2120,7 @@ function extractSkillPhrases(item) {
 
 function isSkillLikeText(item, ignorePattern) {
   if (!item || item.length < 2 || item.length > 24) return false;
+  if (isExcludedSkillText(item)) return false;
   if (ignorePattern.test(item)) return false;
   if (/[のにをはがでへもとや]/.test(item)) return false;
   if (/[（）()]/.test(item)) return false;
@@ -2120,6 +2131,12 @@ function isSkillLikeText(item, ignorePattern) {
   if (/(下記|以下|上記|例|目安|歓迎|必須|応募|募集|求める|対象|職務|業務|待遇|勤務地|語学|資格|経験|知識|スキル).{4,}/.test(item)) return false;
   if (item.length > 14 && !/[A-Za-z0-9]/.test(item)) return false;
   return true;
+}
+
+function isExcludedSkillText(item) {
+  const normalized = normalizeSkill(item);
+  if (!normalized) return true;
+  return EXCLUDED_SKILL_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 function extractCertificationsFromText(raw) {
