@@ -19,6 +19,8 @@ anonキーは公開前提のキーです。書き込みを公開したくない�
 
 求人の保存と取得はブラウザからSupabaseへ直接行います。`supabase-config.json` が読み込めない場合は、ブラウザ内のIndexedDBへフォールバックします。
 
-API関連ファイルは使っていません。クロール処理は `crawler.js` にあります。ただしAPIなし構成では、取得先サイトがCORSを許可していない場合、ブラウザから求人ページを取得できません。
+基本のクロール処理は `crawler.js` にあります。ただしAPIなし構成では、取得先サイトがCORSを許可していない場合、ブラウザから求人ページを取得できません。
+
+富士通の求人サイトなどCORSでブラウザ直取得できないサイト向けに、Cloudflare Pages Functions の `functions/api/proxy.js` を追加しています。Pages Functions が有効な環境では、`crawler.js` が直取得に失敗したときだけ `/api/proxy` 経由で取得します。
 
 求人票の直接入力は `company-parsers.js` の会社別ルールとスキル辞書で抽出します。NTT DATA形式を初期対応済みです。抽出後は保存前編集フォームで修正してからDBに保存できます。

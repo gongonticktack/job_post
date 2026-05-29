@@ -10,9 +10,19 @@
   ];
 
   window.crawlJobsBrowser = async function crawlJobsBrowser(listUrl, company, limit, onStatus = () => {}) {
-    const listHtml = await fetchText(listUrl);
-    const detailUrls = extractJobLinks(listHtml, listUrl).slice(0, limit);
+    const isFujitsu = isFujitsuJobsUrl(listUrl);
+    if (isFujitsu && isFujitsuJobDetailUrl(listUrl)) {
+      const html = await fetchText(listUrl);
+      const parsed = parseJobDetail(html, listUrl, company);
+      return parsed.description ? [parsed] : [];
+    }
+
+    const listHtml = isFujitsu ? "" : await fetchText(listUrl);
+    const detailUrls = (isFujitsu
+      ? await extractFujitsuJobLinks(listUrl, limit, onStatus)
+      : extractJobLinks(listHtml, listUrl)).slice(0, limit);
     if (!detailUrls.length) {
+      if (isFujitsu) return [];
       const parsed = parseJobDetail(listHtml, listUrl, company);
       return parsed.description ? [parsed] : [];
     }
@@ -33,7 +43,7 @@
 
   async function fetchText(url) {
     try {
-      const response = await fetch(url, { credentials: "omit" });
+      const response = await fetchWithProxyFallback(url, { credentials: "omit" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return response.text();
     } catch (error) {
@@ -51,9 +61,104 @@
     return [...new Set(links)].filter((href) => href !== baseUrl);
   }
 
+  async function extractFujitsuJobLinks(listUrl, limit, onStatus) {
+    const url = new URL(listUrl);
+    const locale = url.searchParams.get("locale") || "ja_JP";
+    const pageSize = 25;
+    const startPage = Number.parseInt(url.searchParams.get("pageNumber"), 10) || 0;
+    const links = [];
+    let pageNumber = startPage;
+    let totalJobs = Infinity;
+
+    while (links.length < limit && pageNumber * pageSize < totalJobs) {
+      onStatus(`富士通の求人一覧APIを取得しています... ${links.length}/${limit}`);
+      const result = await fetchFujitsuSearchPage(url, pageNumber, locale);
+      totalJobs = Number.isFinite(result.totalJobs) ? result.totalJobs : links.length;
+      const pageLinks = (result.jobSearchResult || [])
+        .map((item) => item.response || item)
+        .map((job) => buildFujitsuJobUrl(url.origin, job, locale))
+        .filter(Boolean);
+      links.push(...pageLinks);
+      if (!pageLinks.length) break;
+      pageNumber += 1;
+    }
+
+    return [...new Set(links)];
+  }
+
+  async function fetchFujitsuSearchPage(listUrl, pageNumber, locale) {
+    const body = {
+      keywords: listUrl.searchParams.get("q") || "",
+      locale,
+      location: listUrl.searchParams.get("locationsearch") || "",
+      pageNumber,
+      sortBy: listUrl.searchParams.get("sortBy") || "recent"
+    };
+    const facetFilters = parseFacetFilters(listUrl.searchParams.get("facetFilters"));
+    const candidates = facetFilters
+      ? [{ ...body, facetFilters }, body]
+      : [body];
+
+    for (const payload of candidates) {
+      const response = await fetchWithProxyFallback(`${listUrl.origin}/services/recruiting/v1/jobs`, {
+        method: "POST",
+        credentials: "omit",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) {
+        if (payload.facetFilters) continue;
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response.json();
+    }
+    return { jobSearchResult: [], totalJobs: 0 };
+  }
+
+  async function fetchWithProxyFallback(url, options = {}) {
+    try {
+      return await fetch(url, options);
+    } catch (directError) {
+      if (!/^https?:$/.test(window.location.protocol)) throw directError;
+      const response = await fetch("/api/proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url,
+          method: options.method || "GET",
+          headers: options.headers || {},
+          body: options.body || null
+        })
+      });
+      return response;
+    }
+  }
+
+  function parseFacetFilters(raw) {
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch (error) {
+      console.warn("facetFilters parse failed", error);
+      return null;
+    }
+  }
+
+  function buildFujitsuJobUrl(origin, job, locale) {
+    const id = job.id || job.jobReqId;
+    const title = job.unifiedUrlTitle || job.urlTitle || encodeURIComponent(job.unifiedStandardTitle || job.title || "job");
+    if (!id) return "";
+    return `${origin}/job/${title}/${id}-${locale}/`;
+  }
+
   function parseJobDetail(html, sourceUrl, company) {
     const doc = new DOMParser().parseFromString(html, "text/html");
-    const text = cleanText(doc.body?.innerText || "");
+    const bodyText = doc.body?.innerText || doc.body?.textContent || "";
+    if (isFujitsuJobsUrl(sourceUrl) || /求人ID[:：]/.test(bodyText)) {
+      return parseFujitsuJobDetail(bodyText, sourceUrl, company);
+    }
+
+    const text = cleanText(bodyText);
     const sections = readLabeledSections(doc);
     const title = cleanText(doc.querySelector("h1, h2, .jobTitle, .title")?.textContent || sections["職種名"] || sections["求人名"] || "");
     const description = firstSection(sections, ["業務内容", "仕事内容", "職務内容", "募集内容", "職務概要"]) || sliceAround(text, /(業務内容|仕事内容|職務内容)/);
@@ -73,6 +178,71 @@
       requiredSkills: extractSkills(requiredRaw || text),
       preferredSkills: extractSkills(preferredRaw),
       notes,
+      sourceUrl,
+      crawledAt: new Date().toISOString()
+    };
+  }
+
+  function parseFujitsuJobDetail(bodyText, sourceUrl, fallbackCompany) {
+    const text = normalizeLines(bodyText);
+    const title = firstNonEmpty([
+      sectionBetweenLines(text, ["求人内容"], ["勤務地域", "Location Flexibility", "求人ID"]),
+      lineAfter(text, "####"),
+      sourceUrl.match(/\/job\/([^/]+)\//)?.[1] ? decodeURIComponent(sourceUrl.match(/\/job\/([^/]+)\//)[1]).replace(/-/g, " ") : ""
+    ]);
+    const company = firstNonEmpty([
+      inlineValue(text, ["実施会社", "会社名"]),
+      fallbackCompany,
+      "富士通株式会社"
+    ]);
+    const description = firstNonEmpty([
+      sectionAfterLabel(text, [
+        "インターンシップの業務内容やチームでの役割",
+        "【募集範囲と具体的業務内容】",
+        "募集範囲と具体的業務内容",
+        "職務内容",
+        "仕事内容"
+      ], [
+        "赴任サポートの有無", "在留資格手配サポートの有無", "－－－求める資格", "【個人に期待する役割やミッション】",
+        "【仕事の魅力・やりがい】", "【必須", "【歓迎", "Copyright"
+      ]),
+      sliceAround(cleanText(text), /(インターンシップの業務内容|募集範囲|職務内容|仕事内容)/)
+    ]);
+    const requiredRaw = sectionAfterLabel(text, [
+      "【必須の経験・キャリアや資格・言語】",
+      "必須の経験・キャリアや資格・言語",
+      "必須条件",
+      "必要条件"
+    ], ["【歓迎", "【語学力】", "【日本語レベル】", "－－－待遇", "【給与】", "勤務地"]);
+    const preferredRaw = sectionAfterLabel(text, [
+      "【歓迎する経験・キャリアや資格・言語】",
+      "歓迎する経験・キャリアや資格・言語",
+      "歓迎条件"
+    ], ["【語学力】", "【日本語レベル】", "－－－待遇", "【給与】", "勤務地"]);
+    const location = inlineValue(text, ["勤務地域", "【勤務地】", "勤務地"]);
+    const incomeRaw = firstNonEmpty([
+      sectionAfterLabel(text, ["【給与】", "給与", "想定年収", "年収"], ["勤務地", "－－－勤務地", "備考", "Copyright"]),
+      findIncomeText(cleanText(text))
+    ]);
+    const income = parseIncome(incomeRaw);
+    const notes = [
+      inlineValue(text, ["求人ID"]),
+      inlineValue(text, ["掲載開始日"]),
+      location ? `勤務地: ${location}` : "",
+      sectionAfterLabel(text, ["赴任サポートの有無"], ["Copyright", "在留資格手配サポートの有無"])
+    ].filter(Boolean).join(" / ");
+
+    return {
+      company,
+      title: cleanText(title),
+      description: cleanText(description || text.slice(0, 360)),
+      annualIncomeRaw: incomeRaw,
+      annualIncomeMin: income.min,
+      annualIncomeMax: income.max,
+      requiredSkills: extractSkills(requiredRaw || description),
+      preferredSkills: extractSkills(preferredRaw),
+      notes,
+      location,
       sourceUrl,
       crawledAt: new Date().toISOString()
     };
@@ -133,6 +303,83 @@
   function sliceAround(text, pattern) {
     const index = text.search(pattern);
     return index >= 0 ? text.slice(index, index + 360) : "";
+  }
+
+  function isFujitsuJobsUrl(url) {
+    try {
+      return new URL(url).hostname === "www.jobs.global.fujitsu.com";
+    } catch {
+      return false;
+    }
+  }
+
+  function isFujitsuJobDetailUrl(url) {
+    try {
+      return /^\/job\//.test(new URL(url).pathname);
+    } catch {
+      return false;
+    }
+  }
+
+  function normalizeLines(value) {
+    return String(value || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n")
+      .map((line) => line.replace(/\u00a0/g, " ").trim())
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  function firstNonEmpty(values) {
+    return values.map((value) => cleanText(value)).find(Boolean) || "";
+  }
+
+  function lineAfter(text, prefix) {
+    const line = text.split("\n").find((item) => item.trim().startsWith(prefix));
+    return line ? line.replace(prefix, "").trim() : "";
+  }
+
+  function inlineValue(text, labels) {
+    for (const line of text.split("\n")) {
+      for (const label of labels) {
+        if (!line.includes(label)) continue;
+        const value = line
+          .slice(line.indexOf(label) + label.length)
+          .replace(/^[\s:：]+/, "")
+          .trim();
+        if (value) return value;
+      }
+    }
+    return "";
+  }
+
+  function sectionBetweenLines(text, startLabels, stopLabels) {
+    const lines = text.split("\n");
+    const start = lines.findIndex((line) => startLabels.some((label) => line.trim() === label || line.includes(label)));
+    if (start < 0) return "";
+    const values = [];
+    for (let i = start + 1; i < lines.length; i += 1) {
+      const line = lines[i].trim();
+      if (stopLabels.some((label) => line.includes(label))) break;
+      if (line) values.push(line);
+    }
+    return values.join("\n");
+  }
+
+  function sectionAfterLabel(text, labels, stopLabels) {
+    const lines = text.split("\n");
+    const start = lines.findIndex((line) => labels.some((label) => line.includes(label)));
+    if (start < 0) return "";
+    const values = [];
+    const inline = inlineValue(lines[start], labels);
+    if (inline) values.push(inline);
+    for (let i = start + 1; i < lines.length; i += 1) {
+      const line = lines[i].trim();
+      if (line && stopLabels.some((label) => line.includes(label))) break;
+      if (line) values.push(line);
+    }
+    return values.join("\n");
   }
 
   function cleanText(value) {

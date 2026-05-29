@@ -32,7 +32,7 @@ window.JobParserConfig = {
       ]
     },
     "富士通株式会社": {
-      aliases: ["富士通 株式会社", "富士通Japan株式会社", "富士通JAPAN株式会社", "富士通Japan 株式会社", "Fujitsu Japan"],
+      aliases: ["富士通 株式会社", "富士通Japan株式会社", "富士通JAPAN株式会社", "富士通Japan 株式会社", "Fujitsu Japan", "FUJITSU LIMITED", "Fujitsu"],
       titlePattern: ".+",
       titleMatchIndex: 0,
       headings: {
