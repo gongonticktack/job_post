@@ -666,11 +666,11 @@ function renderFilterControls() {
 function updateCompanyOptions() {
   const parserCompanies = Object.keys(window.JobParserConfig?.companies || {});
   const companies = [...new Set([...parserCompanies, ...state.jobs.map((job) => job.company).filter(Boolean), "株式会社NTTデータ"]
-    .map(canonicalCompanyName)
+    .map(canonicalCompanyOptionName)
     .filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "ja"));
   [els.crawlCompanySelect, els.manualCompanySelect].forEach((select) => {
-    const current = canonicalCompanyName(select.value);
+    const current = canonicalCompanyOptionName(select.value);
     select.innerHTML = "";
     companies.forEach((company) => {
       const option = document.createElement("option");
@@ -686,6 +686,11 @@ function updateCompanyOptions() {
   });
   syncCompanySelect(els.crawlCompanySelect, els.companyName);
   syncCompanySelect(els.manualCompanySelect, els.manualCompanyName);
+}
+
+function canonicalCompanyOptionName(name) {
+  const canonical = canonicalCompanyName(name);
+  return isFujitsuParserCompany(canonical || name) ? "富士通株式会社" : canonical;
 }
 
 function renderMetrics(jobs) {
@@ -1595,6 +1600,10 @@ function canonicalCompanyName(name) {
     }
   }
   return formatUnknownCompanyName(raw);
+}
+
+function isFujitsuParserCompany(name) {
+  return /^(富士通|fujitsu)(japan|limited|株式会社)?$/i.test(normalizeCompanyKey(name));
 }
 
 function cleanCompanyName(name) {
