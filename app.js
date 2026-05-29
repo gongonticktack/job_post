@@ -1233,7 +1233,7 @@ function renderDictionarySettings() {
   renderDictionaryEditor("skill");
   renderSkillCategoryEditor();
   renderDictionaryEditor("certification");
-  renderDictionaryCategoryOptions();
+  refreshSkillCategorySelects();
   renderDictionaryCounts();
 }
 
@@ -1286,11 +1286,9 @@ function createDictionaryRow(entry, type) {
   if (type === "skill") {
     const categoryLabel = document.createElement("label");
     categoryLabel.textContent = "カテゴリ";
-    const category = document.createElement("input");
+    const category = document.createElement("select");
     category.dataset.dictionaryField = "category";
-    category.type = "text";
-    category.setAttribute("list", "dictionaryCategoryOptions");
-    category.value = entry.category || inferDictionaryCategory(entry.term || "", type);
+    fillSkillCategorySelect(category, entry.category || inferDictionaryCategory(entry.term || "", type));
     categoryLabel.appendChild(category);
     row.append(termLabel, categoryLabel, deleteButton);
   } else {
@@ -1318,7 +1316,6 @@ function createSkillCategoryRow(entry) {
   const name = document.createElement("input");
   name.dataset.dictionaryField = "category";
   name.type = "text";
-  name.setAttribute("list", "dictionaryCategoryOptions");
   name.value = entry.category || "";
   nameLabel.appendChild(name);
 
@@ -1420,7 +1417,7 @@ function handleDictionaryEditorClick(event) {
 }
 
 function handleDictionaryEditorChange(event) {
-  if (event.target.closest("[data-dictionary-field='category']")) renderDictionaryCategoryOptions();
+  if (event.target.closest("[data-dictionary-row='skill-category'] [data-dictionary-field='category']")) refreshSkillCategorySelects();
   if (event.target.closest("[data-dictionary-field='term']")) renderDictionaryCounts();
 }
 
@@ -1552,9 +1549,34 @@ function getSkillCategoryEntries() {
   return [...map.values()].sort((a, b) => a.category.localeCompare(b.category, "ja"));
 }
 
-function renderDictionaryCategoryOptions() {
-  const list = document.querySelector("#dictionaryCategoryOptions");
-  if (!list) return;
+function refreshSkillCategorySelects() {
+  const categories = getCurrentSkillCategories();
+  els.skillDictionaryEditor?.querySelectorAll("select[data-dictionary-field='category']").forEach((select) => {
+    fillSkillCategorySelect(select, select.value);
+  });
+  return categories;
+}
+
+function fillSkillCategorySelect(select, selectedValue) {
+  const categories = getCurrentSkillCategories();
+  const current = cleanText(selectedValue);
+  select.innerHTML = "";
+  categories.forEach((category) => {
+    const option = document.createElement("option");
+    option.value = category;
+    option.textContent = category;
+    select.appendChild(option);
+  });
+  if (current && !categories.includes(current)) {
+    const option = document.createElement("option");
+    option.value = current;
+    option.textContent = current;
+    select.appendChild(option);
+  }
+  select.value = current || categories[0] || "general";
+}
+
+function getCurrentSkillCategories() {
   const categories = new Set(getSkillCategoryEntries().map((entry) => entry.category));
   if (els.skillCategoryEditor) {
     [...els.skillCategoryEditor.querySelectorAll("[data-dictionary-field='category']")]
@@ -1562,12 +1584,7 @@ function renderDictionaryCategoryOptions() {
       .filter(Boolean)
       .forEach((category) => categories.add(category));
   }
-  list.innerHTML = "";
-  [...categories].sort((a, b) => a.localeCompare(b, "ja")).forEach((category) => {
-    const option = document.createElement("option");
-    option.value = category;
-    list.appendChild(option);
-  });
+  return [...categories].sort((a, b) => a.localeCompare(b, "ja"));
 }
 
 function normalizeColor(value) {
