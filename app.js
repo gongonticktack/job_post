@@ -149,12 +149,23 @@ async function loadDictionarySettings() {
         await saveDictionaryTerms(config.defaultSkillDictionary, config.defaultCertificationDictionary);
         remote = await getDictionaryTerms();
       }
+      if (!remote.certificationDictionary.length && config.defaultCertificationDictionary?.length) {
+        await saveDictionaryTerms(
+          remote.skillDictionary.length ? remote.skillDictionary : config.defaultSkillDictionary,
+          config.defaultCertificationDictionary,
+          remote.dictionaryCategories?.skill || config.dictionaryCategories?.skill
+        );
+        remote = await getDictionaryTerms();
+      }
       if (remote.missingSkillEntries.length) {
         await appendSkillDictionaryTerms(remote.missingSkillEntries);
         remote = await getDictionaryTerms();
       }
       if (remote.skillDictionary.length) config.skillDictionary = remote.skillDictionary;
       if (remote.certificationDictionary.length) config.certificationDictionary = remote.certificationDictionary;
+      if (!config.certificationDictionary?.length) {
+        config.certificationDictionary = [...(config.defaultCertificationDictionary || [])];
+      }
       config.dictionaryMeta = remote.dictionaryMeta;
       config.dictionaryCategories = remote.dictionaryCategories;
       normalizeLoadedCertificationDictionary(config);
@@ -166,11 +177,16 @@ async function loadDictionarySettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(DICTIONARY_STORAGE_KEY) || "{}");
     if (Array.isArray(saved.skillDictionary)) config.skillDictionary = saved.skillDictionary;
-    if (Array.isArray(saved.certificationDictionary)) config.certificationDictionary = saved.certificationDictionary;
+    if (Array.isArray(saved.certificationDictionary) && saved.certificationDictionary.length) {
+      config.certificationDictionary = saved.certificationDictionary;
+    }
     if (saved.dictionaryMeta) config.dictionaryMeta = saved.dictionaryMeta;
     if (saved.dictionaryCategories) config.dictionaryCategories = saved.dictionaryCategories;
   } catch (error) {
     console.warn("dictionary settings load failed", error);
+  }
+  if (!config.certificationDictionary?.length) {
+    config.certificationDictionary = [...(config.defaultCertificationDictionary || [])];
   }
   normalizeLoadedCertificationDictionary(config);
 }
@@ -1236,11 +1252,20 @@ function textContainsTerm(value, term) {
 }
 
 function getJobCertifications(job) {
-  return [...new Set([
-    ...extractCertificationsFromText(job.requiredCertifications || ""),
-    ...extractCertificationsFromText(job.preferredCertifications || ""),
-    ...extractCertificationsFromText(job.notes || "")
-  ].map(normalizeCertification).filter(Boolean))];
+  const sources = [
+    job.requiredCertifications,
+    job.preferredCertifications,
+    job.notes,
+    job.description,
+    job.appealPoints,
+    job.referenceInfo,
+    ...(job.requiredSkills || []),
+    ...(job.preferredSkills || [])
+  ];
+  return [...new Set(sources
+    .flatMap((value) => extractCertificationsFromText(value || ""))
+    .map(normalizeCertification)
+    .filter(Boolean))];
 }
 
 function renderCertificationTags(container, certifications, highlightTerms = []) {
