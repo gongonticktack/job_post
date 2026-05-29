@@ -170,15 +170,39 @@
           </div>
 
           <form id="dictionaryForm" class="crawl-form">
-            <label>
-              スキル辞書
-              <textarea id="skillDictionaryInput" rows="14" placeholder="単語 | カテゴリ | #色 例: Python | language | #f89797"></textarea>
-            </label>
-            <label>
-              資格辞書
-              <textarea id="certificationDictionaryInput" rows="10" placeholder="資格 | カテゴリ | #色 例: PMP | certification | #d8b4fe"></textarea>
-            </label>
-            <button class="primary-button" type="submit">辞書を保存</button>
+            <datalist id="dictionaryCategoryOptions">
+              <option value="language"></option>
+              <option value="framework"></option>
+              <option value="infra"></option>
+              <option value="data"></option>
+              <option value="ai"></option>
+              <option value="domain"></option>
+              <option value="process"></option>
+              <option value="management"></option>
+              <option value="security"></option>
+              <option value="certification"></option>
+              <option value="general"></option>
+            </datalist>
+
+            <section class="dictionary-section" data-dictionary-type="skill">
+              <div class="dictionary-head">
+                <h3>スキル辞書</h3>
+                <button class="ghost-button compact-button" data-add-dictionary-row="skill" type="button">追加</button>
+              </div>
+              <div id="skillDictionaryEditor" class="dictionary-editor"></div>
+            </section>
+
+            <section class="dictionary-section" data-dictionary-type="certification">
+              <div class="dictionary-head">
+                <h3>資格辞書</h3>
+                <button class="ghost-button compact-button" data-add-dictionary-row="certification" type="button">追加</button>
+              </div>
+              <div id="certificationDictionaryEditor" class="dictionary-editor"></div>
+            </section>
+
+            <div class="form-actions">
+              <button class="primary-button" type="submit">辞書を保存</button>
+            </div>
           </form>
 
           <div id="dictionaryStatus" class="status" hidden></div>

@@ -65,8 +65,8 @@ const els = {
   manualPreview: document.querySelector("#manualPreview"),
   manualEditor: document.querySelector("#manualEditor"),
   dictionaryForm: document.querySelector("#dictionaryForm"),
-  skillDictionaryInput: document.querySelector("#skillDictionaryInput"),
-  certificationDictionaryInput: document.querySelector("#certificationDictionaryInput"),
+  skillDictionaryEditor: document.querySelector("#skillDictionaryEditor"),
+  certificationDictionaryEditor: document.querySelector("#certificationDictionaryEditor"),
   dictionaryStatus: document.querySelector("#dictionaryStatus"),
   resetDictionaryButton: document.querySelector("#resetDictionaryButton"),
   cleanupDataButton: document.querySelector("#cleanupDataButton"),
@@ -116,6 +116,8 @@ function bindEvents() {
   els.crawlForm.addEventListener("submit", handleCrawl);
   els.manualForm.addEventListener("submit", handleManualPreview);
   els.dictionaryForm.addEventListener("submit", handleDictionarySave);
+  els.dictionaryForm.addEventListener("click", handleDictionaryEditorClick);
+  els.dictionaryForm.addEventListener("change", handleDictionaryEditorChange);
   els.resetDictionaryButton.addEventListener("click", resetDictionarySettings);
   els.cleanupDataButton.addEventListener("click", cleanupSavedData);
 }
@@ -667,7 +669,7 @@ function updateCompanyOptions() {
   const parserCompanies = Object.keys(window.JobParserConfig?.companies || {});
   const companies = [...new Set([...parserCompanies, ...state.jobs.map((job) => job.company).filter(Boolean), "株式会社NTTデータ"]
     .map(canonicalCompanyOptionName)
-    .filter(Boolean))]
+    .filter((company) => company && !isHiddenCompanyOption(company)))]
     .sort((a, b) => a.localeCompare(b, "ja"));
   [els.crawlCompanySelect, els.manualCompanySelect].forEach((select) => {
     const current = canonicalCompanyOptionName(select.value);
@@ -690,7 +692,13 @@ function updateCompanyOptions() {
 
 function canonicalCompanyOptionName(name) {
   const canonical = canonicalCompanyName(name);
-  return isFujitsuParserCompany(canonical || name) ? "富士通株式会社" : canonical;
+  return isFujitsuParserCompany(name) || isFujitsuParserCompany(canonical)
+    ? "富士通株式会社"
+    : canonical;
+}
+
+function isHiddenCompanyOption(name) {
+  return /富士通\s*japan|fujitsu\s*japan/i.test(cleanCompanyName(name));
 }
 
 function renderMetrics(jobs) {
@@ -1164,8 +1172,59 @@ function countCertifications(jobs) {
 }
 
 function renderDictionarySettings() {
-  els.skillDictionaryInput.value = formatDictionaryInput("skill");
-  els.certificationDictionaryInput.value = formatDictionaryInput("certification");
+  renderDictionaryEditor("skill");
+  renderDictionaryEditor("certification");
+}
+
+function renderDictionaryEditor(type) {
+  const editor = type === "skill" ? els.skillDictionaryEditor : els.certificationDictionaryEditor;
+  if (!editor) return;
+  editor.innerHTML = "";
+  const entries = getDictionaryEntries(type);
+  entries.forEach((entry) => editor.appendChild(createDictionaryRow(entry, type)));
+  if (!entries.length) editor.appendChild(createDictionaryRow({ term: "", category: type === "certification" ? "certification" : "general", color: getCategoryColor(type === "certification" ? "certification" : "general") }, type));
+}
+
+function createDictionaryRow(entry, type) {
+  const row = document.createElement("div");
+  row.className = "dictionary-row";
+  row.dataset.dictionaryRow = type;
+
+  const termLabel = document.createElement("label");
+  termLabel.textContent = type === "skill" ? "スキル名" : "資格名";
+  const term = document.createElement("input");
+  term.dataset.dictionaryField = "term";
+  term.type = "text";
+  term.value = entry.term || "";
+  term.placeholder = type === "skill" ? "例: Python" : "例: PMP";
+  termLabel.appendChild(term);
+
+  const categoryLabel = document.createElement("label");
+  categoryLabel.textContent = "カテゴリ";
+  const category = document.createElement("input");
+  category.dataset.dictionaryField = "category";
+  category.type = "text";
+  category.setAttribute("list", "dictionaryCategoryOptions");
+  category.value = entry.category || inferDictionaryCategory(entry.term || "", type);
+  categoryLabel.appendChild(category);
+
+  const colorLabel = document.createElement("label");
+  colorLabel.textContent = "カラー";
+  colorLabel.className = "dictionary-color-label";
+  const color = document.createElement("input");
+  color.dataset.dictionaryField = "color";
+  color.type = "color";
+  color.value = normalizeColor(entry.color) || getCategoryColor(category.value) || "#25d6a2";
+  colorLabel.appendChild(color);
+
+  const deleteButton = document.createElement("button");
+  deleteButton.className = "danger-button compact-button";
+  deleteButton.dataset.deleteDictionaryRow = type;
+  deleteButton.type = "button";
+  deleteButton.textContent = "削除";
+
+  row.append(termLabel, categoryLabel, colorLabel, deleteButton);
+  return row;
 }
 
 function renderSettingsJobList() {
@@ -1201,8 +1260,8 @@ function renderSettingsJobList() {
 
 async function handleDictionarySave(event) {
   event.preventDefault();
-  const skillEntries = parseDictionaryInput(els.skillDictionaryInput.value, "skill");
-  const certificationEntries = parseDictionaryInput(els.certificationDictionaryInput.value, "certification");
+  const skillEntries = readDictionaryEditor("skill");
+  const certificationEntries = readDictionaryEditor("certification");
   const skillDictionary = skillEntries.map((entry) => entry.term);
   const certificationDictionary = certificationEntries.map((entry) => entry.term);
   window.JobParserConfig.skillDictionary = skillDictionary;
@@ -1218,6 +1277,37 @@ async function handleDictionarySave(event) {
   } catch (error) {
     els.dictionaryStatus.hidden = false;
     els.dictionaryStatus.textContent = `辞書保存に失敗しました: ${error.message}`;
+  }
+}
+
+function handleDictionaryEditorClick(event) {
+  const addType = event.target.closest("[data-add-dictionary-row]")?.dataset.addDictionaryRow;
+  if (addType) {
+    const editor = addType === "skill" ? els.skillDictionaryEditor : els.certificationDictionaryEditor;
+    editor?.prepend(createDictionaryRow({
+      term: "",
+      category: addType === "certification" ? "certification" : "general",
+      color: getCategoryColor(addType === "certification" ? "certification" : "general")
+    }, addType));
+    editor?.querySelector("[data-dictionary-field='term']")?.focus();
+    return;
+  }
+
+  const deleteButton = event.target.closest("[data-delete-dictionary-row]");
+  if (deleteButton) {
+    deleteButton.closest("[data-dictionary-row]")?.remove();
+  }
+}
+
+function handleDictionaryEditorChange(event) {
+  const field = event.target.closest("[data-dictionary-field]");
+  if (!field) return;
+  const row = field.closest("[data-dictionary-row]");
+  if (!row) return;
+  if (field.dataset.dictionaryField === "category") {
+    const color = row.querySelector("[data-dictionary-field='color']");
+    const categoryColor = getCategoryColor(field.value);
+    if (color && categoryColor) color.value = categoryColor;
   }
 }
 
@@ -1255,6 +1345,17 @@ function parseDictionaryInput(value, type) {
   );
 }
 
+function readDictionaryEditor(type) {
+  const editor = type === "skill" ? els.skillDictionaryEditor : els.certificationDictionaryEditor;
+  if (!editor) return [];
+  return normalizeDictionaryEntries([...editor.querySelectorAll("[data-dictionary-row]")]
+    .map((row) => ({
+      term: row.querySelector("[data-dictionary-field='term']")?.value || "",
+      category: row.querySelector("[data-dictionary-field='category']")?.value || "",
+      color: row.querySelector("[data-dictionary-field='color']")?.value || ""
+    })), type);
+}
+
 function normalizeDictionaryEntries(entries, type) {
   const map = new Map();
   entries.forEach((entry) => {
@@ -1281,6 +1382,24 @@ function formatDictionaryInput(type) {
       return [term, meta.category, meta.color].filter(Boolean).join(" | ");
     })
     .join("\n");
+}
+
+function getDictionaryEntries(type) {
+  const config = window.JobParserConfig || {};
+  return normalizeDictionaryEntries(type === "skill" ? config.skillDictionary || [] : config.certificationDictionary || [], type)
+    .map((entry) => {
+      const meta = config.dictionaryMeta?.[type]?.[normalizeDictionaryKey(entry.term)] || {};
+      return {
+        ...entry,
+        category: meta.category || entry.category,
+        color: meta.color || entry.color
+      };
+    });
+}
+
+function normalizeColor(value) {
+  const color = cleanText(value);
+  return /^#[0-9a-f]{6}$/i.test(color) ? color : "";
 }
 
 function normalizeDictionaryKey(term) {
@@ -1603,7 +1722,12 @@ function canonicalCompanyName(name) {
 }
 
 function isFujitsuParserCompany(name) {
-  return /^(富士通|fujitsu)(japan|limited|株式会社)?$/i.test(normalizeCompanyKey(name));
+  const key = normalizeCompanyKey(name);
+  return key === "富士通"
+    || key === "富士通japan"
+    || key === "fujitsu"
+    || key === "fujitsujapan"
+    || key === "fujitsulimited";
 }
 
 function cleanCompanyName(name) {
