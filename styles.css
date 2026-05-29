@@ -947,6 +947,30 @@ label {
   margin-bottom: 0;
 }
 
+.manual-save-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.duplicate-warning {
+  max-width: 520px;
+  padding: 10px 12px;
+  border: 1px solid rgba(248, 113, 113, 0.58);
+  border-radius: 8px;
+  background: rgba(127, 29, 29, 0.34);
+  color: #fecaca;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.duplicate-warning[hidden] {
+  display: none;
+}
+
 .editor-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -975,6 +999,14 @@ label {
   }
 
   .form-actions > * {
+    width: 100%;
+  }
+
+  .manual-save-actions {
+    justify-content: stretch;
+  }
+
+  .manual-save-actions > * {
     width: 100%;
   }
 

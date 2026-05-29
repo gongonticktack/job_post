@@ -1355,7 +1355,12 @@ function renderSettingsJobList() {
     const title = document.createElement("h3");
     title.textContent = job.title || "職種名未取得";
     const meta = document.createElement("p");
-    meta.textContent = [job.company, job.annualIncomeRaw, job.location].filter(Boolean).join(" / ") || "詳細情報なし";
+    meta.textContent = [
+      job.company,
+      job.annualIncomeRaw,
+      job.location,
+      formatJobRegisteredAt(job)
+    ].filter(Boolean).join(" / ") || "詳細情報なし";
     body.append(title, meta);
 
     const button = document.createElement("button");
@@ -1367,6 +1372,20 @@ function renderSettingsJobList() {
     item.append(body, button);
     els.settingsJobList.appendChild(item);
   });
+}
+
+function formatJobRegisteredAt(job) {
+  const value = job.crawledAt || job.createdAt || job.updatedAt;
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `登録日時: ${date.toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  })}`;
 }
 
 async function handleDictionarySave(event) {
@@ -1657,8 +1676,9 @@ async function handleManualPreview(event) {
   renderJobList(els.manualPreview, [job]);
   renderManualEditor(job);
   const duplicate = findDuplicateSkillProfileJob(job);
+  setManualDuplicateWarning(duplicate);
   if (duplicate) {
-    setInputStatus(`警告: 必須スキル・推奨スキル・資格が同じ求人が既にあります（${duplicate.company || "企業名未設定"} / ${duplicate.title || "職種名未取得"}）。同じ求人票を再入力している可能性があります。`);
+    setInputStatus("解析しました。重複の可能性があります。保存前に内容を確認してください。");
     return;
   }
   setInputStatus("解析しました。必要に応じて編集してから保存してください。");
@@ -1689,6 +1709,8 @@ async function saveManualDraft() {
   }
   try {
     const job = readManualEditorJob();
+    const duplicate = findDuplicateSkillProfileJob(job);
+    setManualDuplicateWarning(duplicate);
     await saveJobs([job]);
     state.manualDraft = job;
     renderJobList(els.manualPreview, [job]);
@@ -1805,7 +1827,10 @@ function renderManualEditor(job) {
   els.manualEditor.innerHTML = `
     <div class="panel-head editor-head">
       <h2>保存前編集</h2>
-      <button class="primary-button" id="manualSaveButton" type="button">この内容で保存</button>
+      <div class="manual-save-actions">
+        <button class="primary-button" id="manualSaveButton" type="button">この内容で保存</button>
+        <div id="manualDuplicateWarning" class="duplicate-warning" hidden></div>
+      </div>
     </div>
     <div class="editor-grid">
       <label>企業名<input data-field="company" type="text"></label>
@@ -1833,6 +1858,22 @@ function renderManualEditor(job) {
   setEditorValue("appealPoints", job.appealPoints);
   setEditorValue("notes", job.notes);
   els.manualEditor.querySelector("#manualSaveButton").addEventListener("click", saveManualDraft);
+  els.manualEditor.addEventListener("input", updateManualDuplicateWarningFromEditor);
+}
+
+function updateManualDuplicateWarningFromEditor() {
+  if (!state.manualDraft || els.manualEditor.hidden) return;
+  const job = readManualEditorJob();
+  setManualDuplicateWarning(findDuplicateSkillProfileJob(job));
+}
+
+function setManualDuplicateWarning(duplicate) {
+  const warning = els.manualEditor.querySelector("#manualDuplicateWarning");
+  if (!warning) return;
+  warning.hidden = !duplicate;
+  warning.textContent = duplicate
+    ? `重複の可能性: ${duplicate.company || "企業名未設定"} / ${duplicate.title || "職種名未取得"}`
+    : "";
 }
 
 function setEditorValue(field, value) {
@@ -2043,8 +2084,28 @@ function extractSkillsFromText(raw, parser = getCompanyParser()) {
   const bulletItems = raw
     .split(/\n|・|●|■|,|、|;/)
     .map((item) => cleanText(item).replace(/^[\-\u30fb\s]+/, ""))
+    .flatMap(extractSkillPhrases)
     .filter((item) => isSkillLikeText(item, ignorePattern));
   return [...new Set([...found, ...bulletItems].map(normalizeSavedSkill).filter(Boolean))].slice(0, 24);
+}
+
+function extractSkillPhrases(item) {
+  const cleaned = cleanText(item);
+  if (!cleaned) return [];
+  const phrases = [cleaned];
+  const patterns = [
+    /^(.+?)としての/,
+    /^(.+?)を活用した/,
+    /^(.+?)を扱った/,
+    /^(.+?)の分析/,
+    /^(.+?)の解析/,
+    /^(.+?)に.*従事/
+  ];
+  patterns.forEach((pattern) => {
+    const match = cleaned.match(pattern);
+    if (match?.[1]) phrases.push(match[1]);
+  });
+  return phrases.map((phrase) => phrase.replace(/^(以下のいずれかの)?/, "").trim()).filter(Boolean);
 }
 
 function isSkillLikeText(item, ignorePattern) {
