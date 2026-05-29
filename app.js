@@ -157,10 +157,6 @@ async function loadDictionarySettings() {
         );
         remote = await getDictionaryTerms();
       }
-      if (remote.missingSkillEntries.length) {
-        await appendSkillDictionaryTerms(remote.missingSkillEntries);
-        remote = await getDictionaryTerms();
-      }
       if (remote.skillDictionary.length) config.skillDictionary = remote.skillDictionary;
       if (remote.certificationDictionary.length) config.certificationDictionary = remote.certificationDictionary;
       if (!config.certificationDictionary?.length) {
@@ -238,35 +234,17 @@ async function getDictionaryTerms() {
   const categoryById = buildCategoryByIdMap(categoryRows);
   const normalizedRows = rows.map((row) => normalizeDictionaryTermRow(row, categoryById));
   const categoryColorMap = buildCategoryColorMap(categoryRows);
-  const skillRows = await supabaseRequest("skills?select=name&order=name.asc");
-  const dictionarySkillTerms = new Set(normalizedRows
-    .filter((row) => row.dictionary_type === "skill")
-    .map((row) => normalizeDictionaryKey(row.term)));
   const enrichedRows = normalizedRows.map((row) => ({
     ...row,
     color: getDictionaryCategoryColor(row.dictionary_type, row.category, categoryColorMap, row.color)
   }));
-  const skillTableRows = skillRows
-    .map((row) => normalizeSkill(row.name || ""))
-    .filter((name) => name && !dictionarySkillTerms.has(normalizeDictionaryKey(name)))
-    .map((term) => {
-      const category = inferDictionaryCategory(term, "skill");
-      return {
-        dictionary_type: "skill",
-        term,
-        category,
-        color: getDictionaryCategoryColor("skill", category, categoryColorMap),
-        sort_order: Number.MAX_SAFE_INTEGER
-      };
-    });
-  const mergedRows = [...enrichedRows, ...skillTableRows];
   return {
-    skillDictionary: mergedRows.filter((row) => row.dictionary_type === "skill").map((row) => row.term),
-    certificationDictionary: mergedRows.filter((row) => row.dictionary_type === "certification").map((row) => row.term),
-    dictionaryMeta: buildDictionaryMeta(mergedRows),
-    dictionaryCategories: buildDictionaryCategories(categoryRows, mergedRows),
+    skillDictionary: enrichedRows.filter((row) => row.dictionary_type === "skill").map((row) => row.term),
+    certificationDictionary: enrichedRows.filter((row) => row.dictionary_type === "certification").map((row) => row.term),
+    dictionaryMeta: buildDictionaryMeta(enrichedRows),
+    dictionaryCategories: buildDictionaryCategories(categoryRows, enrichedRows),
     hasDictionaryTerms: normalizedRows.length > 0,
-    missingSkillEntries: skillTableRows
+    missingSkillEntries: []
   };
 }
 
@@ -405,6 +383,9 @@ async function saveDictionaryTerms(skillDictionary, certificationDictionary, ski
     });
   }
   await syncSkillDictionaryToSupabaseSkills(skillEntries);
+  await pruneClientJobSkillsOutsideDictionary(skillEntries);
+  await pruneSupabaseJobSkillsOutsideDictionary(skillEntries);
+  await pruneSupabaseSkillsOutsideDictionary(skillEntries);
 }
 
 async function saveDictionaryCategories(categoryEntries) {
@@ -457,22 +438,74 @@ async function syncSkillDictionaryToSupabaseSkills(skillEntries) {
   });
 }
 
-async function appendSkillDictionaryTerms(skillEntries) {
+async function pruneSupabaseSkillsOutsideDictionary(skillEntries) {
   if (!state.supabase) return;
-  const categoryRows = await getDictionaryCategories();
-  const categoryIdMap = buildCategoryIdMap(categoryRows);
-  const rows = normalizeDictionaryEntries(skillEntries, "skill").map((entry, index) => ({
-    dictionary_type: "skill",
-    term: entry.term,
-    category_id: categoryIdMap.get(`skill:${normalizeDictionaryKey(entry.category || "")}`) || null,
-    sort_order: 100000 + index
-  }));
-  if (!rows.length) return;
-  await supabaseRequest("dictionary_terms?on_conflict=dictionary_type,term", {
-    method: "POST",
-    body: JSON.stringify(rows),
-    headers: { prefer: "resolution=ignore-duplicates,return=minimal" }
+  const allowed = new Set(normalizeDictionaryEntries(skillEntries, "skill")
+    .map((entry) => normalizeDictionaryKey(entry.term))
+    .filter(Boolean));
+  const rows = await supabaseRequest("skills?select=id,name");
+  for (const row of rows) {
+    if (allowed.has(normalizeDictionaryKey(row.name || ""))) continue;
+    await supabaseRequest(`skills?id=eq.${encodeURIComponent(row.id)}`, {
+      method: "DELETE",
+      headers: { prefer: "return=minimal" }
+    });
+  }
+}
+
+async function pruneSupabaseJobSkillsOutsideDictionary(skillEntries) {
+  if (!state.supabase) return;
+  const allowed = new Set(normalizeDictionaryEntries(skillEntries, "skill")
+    .map((entry) => normalizeDictionaryKey(entry.term))
+    .filter(Boolean));
+  const rows = await supabaseRequest("jobs?select=id,required_skills,preferred_skills");
+  for (const row of rows) {
+    const requiredSkills = filterSkillsByDictionary(row.required_skills || [], allowed);
+    const preferredSkills = filterSkillsByDictionary(row.preferred_skills || [], allowed);
+    if (!hasSkillListChanged(row.required_skills || [], requiredSkills)
+      && !hasSkillListChanged(row.preferred_skills || [], preferredSkills)) {
+      continue;
+    }
+    await supabaseRequest(`jobs?id=eq.${encodeURIComponent(row.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        required_skills: requiredSkills,
+        preferred_skills: preferredSkills
+      }),
+      headers: { prefer: "return=minimal" }
+    });
+    await replaceSupabaseJobSkills(row.id, requiredSkills, preferredSkills);
+  }
+}
+
+function filterSkillsByDictionary(skills, allowedKeys = null) {
+  const allowed = allowedKeys || new Set((window.JobParserConfig?.skillDictionary || [])
+    .map(normalizeDictionaryKey)
+    .filter(Boolean));
+  return [...new Set((skills || [])
+    .map(normalizeSavedSkill)
+    .filter((skill) => skill && allowed.has(normalizeDictionaryKey(skill))))];
+}
+
+async function pruneClientJobSkillsOutsideDictionary(skillEntries) {
+  const allowed = new Set(normalizeDictionaryEntries(skillEntries, "skill")
+    .map((entry) => normalizeDictionaryKey(entry.term))
+    .filter(Boolean));
+  const updatedJobs = [];
+  state.jobs = state.jobs.map((job) => {
+    const requiredSkills = filterSkillsByDictionary(job.requiredSkills || [], allowed);
+    const preferredSkills = filterSkillsByDictionary(job.preferredSkills || [], allowed);
+    if (!hasSkillListChanged(job.requiredSkills || [], requiredSkills)
+      && !hasSkillListChanged(job.preferredSkills || [], preferredSkills)) {
+      return job;
+    }
+    const updatedJob = { ...job, requiredSkills, preferredSkills };
+    updatedJobs.push(updatedJob);
+    return updatedJob;
   });
+  if (!state.supabase && updatedJobs.length) {
+    await saveLocalJobs(updatedJobs);
+  }
 }
 
 function buildDictionaryMeta(rows) {
@@ -586,7 +619,7 @@ async function saveSupabaseJobs(jobs) {
 }
 
 async function saveSupabaseSkills(jobId, skills, skillType) {
-  const normalizedSkills = [...new Set(skills.map(normalizeSkill).filter((skill) => isSavedSkillValid(skill, /$^/)))];
+  const normalizedSkills = filterSkillsByDictionary(skills);
   for (const name of normalizedSkills) {
     const rows = await supabaseRequest("skills?on_conflict=name", {
       method: "POST",
@@ -834,7 +867,7 @@ function isSavedSkillValid(skill, ignorePattern) {
   if (!normalized) return false;
   if (isExcludedSkillText(normalized)) return false;
   if (dictionary.some((term) => term.toLowerCase() === normalized.toLowerCase())) return true;
-  return isSkillLikeText(normalized, ignorePattern);
+  return false;
 }
 
 function hasSkillListChanged(before = [], after = []) {
@@ -2324,7 +2357,7 @@ function extractSkillsFromText(raw, parser = getCompanyParser()) {
     .map((item) => cleanText(item).replace(/^[\-\u30fb\s]+/, ""))
     .flatMap(extractSkillPhrases)
     .filter((item) => isSkillLikeText(item, ignorePattern));
-  return [...new Set([...found, ...bulletItems].map(normalizeSavedSkill).filter(Boolean))].slice(0, 24);
+  return filterSkillsByDictionary([...found, ...bulletItems]).slice(0, 24);
 }
 
 function extractSkillPhrases(item) {
