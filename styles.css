@@ -748,8 +748,24 @@ select {
 }
 
 .dictionary-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   font-size: 15px;
+}
+
+.dictionary-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  background: rgba(2, 6, 23, 0.28);
 }
 
 .dictionary-editor {
@@ -762,13 +778,21 @@ select {
 
 .dictionary-row {
   display: grid;
-  grid-template-columns: minmax(160px, 1.3fr) minmax(130px, 0.8fr) 88px auto;
+  grid-template-columns: minmax(160px, 1.3fr) minmax(130px, 0.8fr) auto;
   align-items: end;
   gap: 10px;
   padding: 10px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 8px;
   background: rgba(2, 6, 23, 0.28);
+}
+
+.dictionary-row-simple {
+  grid-template-columns: minmax(160px, 1fr) auto;
+}
+
+.dictionary-category-row {
+  grid-template-columns: minmax(150px, 1fr) 96px auto;
 }
 
 .dictionary-row label {
@@ -789,6 +813,10 @@ select {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: rgba(15, 23, 42, 0.72);
+}
+
+.compact-dictionary-editor {
+  max-height: 240px;
 }
 
 label {

@@ -66,7 +66,10 @@ const els = {
   manualEditor: document.querySelector("#manualEditor"),
   dictionaryForm: document.querySelector("#dictionaryForm"),
   skillDictionaryEditor: document.querySelector("#skillDictionaryEditor"),
+  skillCategoryEditor: document.querySelector("#skillCategoryEditor"),
   certificationDictionaryEditor: document.querySelector("#certificationDictionaryEditor"),
+  skillDictionaryCount: document.querySelector("#skillDictionaryCount"),
+  certificationDictionaryCount: document.querySelector("#certificationDictionaryCount"),
   dictionaryStatus: document.querySelector("#dictionaryStatus"),
   resetDictionaryButton: document.querySelector("#resetDictionaryButton"),
   cleanupDataButton: document.querySelector("#cleanupDataButton"),
@@ -118,6 +121,7 @@ function bindEvents() {
   els.dictionaryForm.addEventListener("submit", handleDictionarySave);
   els.dictionaryForm.addEventListener("click", handleDictionaryEditorClick);
   els.dictionaryForm.addEventListener("change", handleDictionaryEditorChange);
+  els.dictionaryForm.addEventListener("input", handleDictionaryEditorInput);
   els.resetDictionaryButton.addEventListener("click", resetDictionarySettings);
   els.cleanupDataButton.addEventListener("click", cleanupSavedData);
 }
@@ -130,9 +134,14 @@ async function loadDictionarySettings() {
   config.dictionaryMeta = config.dictionaryMeta || { skill: {}, certification: {} };
   if (state.supabase) {
     try {
-      const remote = await getDictionaryTerms();
-      if (!remote.skillDictionary.length && !remote.certificationDictionary.length) {
+      let remote = await getDictionaryTerms();
+      if (!remote.hasDictionaryTerms) {
         await saveDictionaryTerms(config.defaultSkillDictionary, config.defaultCertificationDictionary);
+        remote = await getDictionaryTerms();
+      }
+      if (remote.missingSkillEntries.length) {
+        await appendSkillDictionaryTerms(remote.missingSkillEntries);
+        remote = await getDictionaryTerms();
       }
       if (remote.skillDictionary.length) config.skillDictionary = remote.skillDictionary;
       if (remote.certificationDictionary.length) config.certificationDictionary = remote.certificationDictionary;
@@ -197,10 +206,27 @@ async function saveParserConfigs(companies) {
 
 async function getDictionaryTerms() {
   const rows = await supabaseRequest("dictionary_terms?select=dictionary_type,term,category,color,sort_order&order=dictionary_type.asc,sort_order.asc,term.asc");
+  const skillRows = await supabaseRequest("skills?select=name&order=name.asc");
+  const dictionarySkillTerms = new Set(rows
+    .filter((row) => row.dictionary_type === "skill")
+    .map((row) => normalizeDictionaryKey(row.term)));
+  const skillTableRows = skillRows
+    .map((row) => normalizeSkill(row.name || ""))
+    .filter((name) => name && !dictionarySkillTerms.has(normalizeDictionaryKey(name)))
+    .map((term) => ({
+      dictionary_type: "skill",
+      term,
+      category: inferDictionaryCategory(term, "skill"),
+      color: getCategoryColor(inferDictionaryCategory(term, "skill")),
+      sort_order: Number.MAX_SAFE_INTEGER
+    }));
+  const mergedRows = [...rows, ...skillTableRows];
   return {
-    skillDictionary: rows.filter((row) => row.dictionary_type === "skill").map((row) => row.term),
-    certificationDictionary: rows.filter((row) => row.dictionary_type === "certification").map((row) => row.term),
-    dictionaryMeta: buildDictionaryMeta(rows)
+    skillDictionary: mergedRows.filter((row) => row.dictionary_type === "skill").map((row) => row.term),
+    certificationDictionary: mergedRows.filter((row) => row.dictionary_type === "certification").map((row) => row.term),
+    dictionaryMeta: buildDictionaryMeta(mergedRows),
+    hasDictionaryTerms: rows.length > 0,
+    missingSkillEntries: skillTableRows
   };
 }
 
@@ -245,6 +271,38 @@ async function saveDictionaryTerms(skillDictionary, certificationDictionary) {
       body: JSON.stringify(rows)
     });
   }
+  await syncSkillDictionaryToSupabaseSkills(skillEntries);
+}
+
+async function syncSkillDictionaryToSupabaseSkills(skillEntries) {
+  if (!state.supabase) return;
+  const rows = normalizeDictionaryEntries(skillEntries, "skill")
+    .map((entry) => normalizeSkill(entry.term))
+    .filter(Boolean)
+    .map((name) => ({ name, normalized_name: name.toLowerCase() }));
+  if (!rows.length) return;
+  await supabaseRequest("skills?on_conflict=name", {
+    method: "POST",
+    body: JSON.stringify(rows),
+    headers: { prefer: "resolution=merge-duplicates,return=minimal" }
+  });
+}
+
+async function appendSkillDictionaryTerms(skillEntries) {
+  if (!state.supabase) return;
+  const rows = normalizeDictionaryEntries(skillEntries, "skill").map((entry, index) => ({
+    dictionary_type: "skill",
+    term: entry.term,
+    category: entry.category || null,
+    color: entry.color || null,
+    sort_order: 100000 + index
+  }));
+  if (!rows.length) return;
+  await supabaseRequest("dictionary_terms?on_conflict=dictionary_type,term", {
+    method: "POST",
+    body: JSON.stringify(rows),
+    headers: { prefer: "resolution=ignore-duplicates,return=minimal" }
+  });
 }
 
 function buildDictionaryMeta(rows) {
@@ -1173,7 +1231,10 @@ function countCertifications(jobs) {
 
 function renderDictionarySettings() {
   renderDictionaryEditor("skill");
+  renderSkillCategoryEditor();
   renderDictionaryEditor("certification");
+  renderDictionaryCategoryOptions();
+  renderDictionaryCounts();
 }
 
 function renderDictionaryEditor(type) {
@@ -1183,6 +1244,23 @@ function renderDictionaryEditor(type) {
   const entries = getDictionaryEntries(type);
   entries.forEach((entry) => editor.appendChild(createDictionaryRow(entry, type)));
   if (!entries.length) editor.appendChild(createDictionaryRow({ term: "", category: type === "certification" ? "certification" : "general", color: getCategoryColor(type === "certification" ? "certification" : "general") }, type));
+}
+
+function renderDictionaryCounts() {
+  if (els.skillDictionaryCount) {
+    els.skillDictionaryCount.textContent = `${countDictionaryRows("skill")}件`;
+  }
+  if (els.certificationDictionaryCount) {
+    els.certificationDictionaryCount.textContent = `${countDictionaryRows("certification")}件`;
+  }
+}
+
+function countDictionaryRows(type) {
+  const editor = getDictionaryEditor(type);
+  if (!editor) return 0;
+  return [...editor.querySelectorAll("[data-dictionary-row]")]
+    .filter((row) => cleanText(row.querySelector("[data-dictionary-field='term']")?.value || ""))
+    .length;
 }
 
 function createDictionaryRow(entry, type) {
@@ -1199,14 +1277,50 @@ function createDictionaryRow(entry, type) {
   term.placeholder = type === "skill" ? "例: Python" : "例: PMP";
   termLabel.appendChild(term);
 
-  const categoryLabel = document.createElement("label");
-  categoryLabel.textContent = "カテゴリ";
-  const category = document.createElement("input");
-  category.dataset.dictionaryField = "category";
-  category.type = "text";
-  category.setAttribute("list", "dictionaryCategoryOptions");
-  category.value = entry.category || inferDictionaryCategory(entry.term || "", type);
-  categoryLabel.appendChild(category);
+  const deleteButton = document.createElement("button");
+  deleteButton.className = "danger-button compact-button";
+  deleteButton.dataset.deleteDictionaryRow = type;
+  deleteButton.type = "button";
+  deleteButton.textContent = "削除";
+
+  if (type === "skill") {
+    const categoryLabel = document.createElement("label");
+    categoryLabel.textContent = "カテゴリ";
+    const category = document.createElement("input");
+    category.dataset.dictionaryField = "category";
+    category.type = "text";
+    category.setAttribute("list", "dictionaryCategoryOptions");
+    category.value = entry.category || inferDictionaryCategory(entry.term || "", type);
+    categoryLabel.appendChild(category);
+    row.append(termLabel, categoryLabel, deleteButton);
+  } else {
+    row.classList.add("dictionary-row-simple");
+    row.append(termLabel, deleteButton);
+  }
+  return row;
+}
+
+function renderSkillCategoryEditor() {
+  const editor = els.skillCategoryEditor;
+  if (!editor) return;
+  editor.innerHTML = "";
+  const categories = getSkillCategoryEntries();
+  categories.forEach((entry) => editor.appendChild(createSkillCategoryRow(entry)));
+}
+
+function createSkillCategoryRow(entry) {
+  const row = document.createElement("div");
+  row.className = "dictionary-row dictionary-category-row";
+  row.dataset.dictionaryRow = "skill-category";
+
+  const nameLabel = document.createElement("label");
+  nameLabel.textContent = "カテゴリ";
+  const name = document.createElement("input");
+  name.dataset.dictionaryField = "category";
+  name.type = "text";
+  name.setAttribute("list", "dictionaryCategoryOptions");
+  name.value = entry.category || "";
+  nameLabel.appendChild(name);
 
   const colorLabel = document.createElement("label");
   colorLabel.textContent = "カラー";
@@ -1214,16 +1328,16 @@ function createDictionaryRow(entry, type) {
   const color = document.createElement("input");
   color.dataset.dictionaryField = "color";
   color.type = "color";
-  color.value = normalizeColor(entry.color) || getCategoryColor(category.value) || "#25d6a2";
+  color.value = normalizeColor(entry.color) || getCategoryColor(entry.category) || "#25d6a2";
   colorLabel.appendChild(color);
 
   const deleteButton = document.createElement("button");
   deleteButton.className = "danger-button compact-button";
-  deleteButton.dataset.deleteDictionaryRow = type;
+  deleteButton.dataset.deleteDictionaryRow = "skill-category";
   deleteButton.type = "button";
   deleteButton.textContent = "削除";
 
-  row.append(termLabel, categoryLabel, colorLabel, deleteButton);
+  row.append(nameLabel, colorLabel, deleteButton);
   return row;
 }
 
@@ -1260,13 +1374,15 @@ function renderSettingsJobList() {
 
 async function handleDictionarySave(event) {
   event.preventDefault();
-  const skillEntries = readDictionaryEditor("skill");
+  const categoryColors = readSkillCategoryEditor();
+  const skillEntries = readDictionaryEditor("skill", categoryColors);
   const certificationEntries = readDictionaryEditor("certification");
   const skillDictionary = skillEntries.map((entry) => entry.term);
   const certificationDictionary = certificationEntries.map((entry) => entry.term);
   window.JobParserConfig.skillDictionary = skillDictionary;
   window.JobParserConfig.certificationDictionary = certificationDictionary;
   window.JobParserConfig.dictionaryMeta = buildDictionaryMeta([...skillEntries, ...certificationEntries]);
+  renderDictionaryCounts();
   try {
     await saveDictionaryTerms(skillEntries, certificationEntries);
     els.dictionaryStatus.hidden = false;
@@ -1283,32 +1399,33 @@ async function handleDictionarySave(event) {
 function handleDictionaryEditorClick(event) {
   const addType = event.target.closest("[data-add-dictionary-row]")?.dataset.addDictionaryRow;
   if (addType) {
-    const editor = addType === "skill" ? els.skillDictionaryEditor : els.certificationDictionaryEditor;
-    editor?.prepend(createDictionaryRow({
-      term: "",
-      category: addType === "certification" ? "certification" : "general",
-      color: getCategoryColor(addType === "certification" ? "certification" : "general")
-    }, addType));
-    editor?.querySelector("[data-dictionary-field='term']")?.focus();
+    const editor = getDictionaryEditor(addType);
+    const row = addType === "skill-category"
+      ? createSkillCategoryRow({ category: "", color: "#25d6a2" })
+      : createDictionaryRow({
+          term: "",
+          category: addType === "certification" ? "certification" : "general",
+          color: getCategoryColor(addType === "certification" ? "certification" : "general")
+        }, addType);
+    editor?.prepend(row);
+    row.querySelector("[data-dictionary-field='term'], [data-dictionary-field='category']")?.focus();
     return;
   }
 
   const deleteButton = event.target.closest("[data-delete-dictionary-row]");
   if (deleteButton) {
     deleteButton.closest("[data-dictionary-row]")?.remove();
+    renderDictionaryCounts();
   }
 }
 
 function handleDictionaryEditorChange(event) {
-  const field = event.target.closest("[data-dictionary-field]");
-  if (!field) return;
-  const row = field.closest("[data-dictionary-row]");
-  if (!row) return;
-  if (field.dataset.dictionaryField === "category") {
-    const color = row.querySelector("[data-dictionary-field='color']");
-    const categoryColor = getCategoryColor(field.value);
-    if (color && categoryColor) color.value = categoryColor;
-  }
+  if (event.target.closest("[data-dictionary-field='category']")) renderDictionaryCategoryOptions();
+  if (event.target.closest("[data-dictionary-field='term']")) renderDictionaryCounts();
+}
+
+function handleDictionaryEditorInput(event) {
+  if (event.target.closest("[data-dictionary-field='term']")) renderDictionaryCounts();
 }
 
 async function resetDictionarySettings() {
@@ -1345,15 +1462,32 @@ function parseDictionaryInput(value, type) {
   );
 }
 
-function readDictionaryEditor(type) {
-  const editor = type === "skill" ? els.skillDictionaryEditor : els.certificationDictionaryEditor;
+function readDictionaryEditor(type, categoryColors = new Map()) {
+  const editor = getDictionaryEditor(type);
   if (!editor) return [];
   return normalizeDictionaryEntries([...editor.querySelectorAll("[data-dictionary-row]")]
     .map((row) => ({
       term: row.querySelector("[data-dictionary-field='term']")?.value || "",
       category: row.querySelector("[data-dictionary-field='category']")?.value || "",
-      color: row.querySelector("[data-dictionary-field='color']")?.value || ""
+      color: categoryColors.get(normalizeDictionaryKey(row.querySelector("[data-dictionary-field='category']")?.value || "")) || ""
     })), type);
+}
+
+function readSkillCategoryEditor() {
+  const map = new Map();
+  if (!els.skillCategoryEditor) return map;
+  [...els.skillCategoryEditor.querySelectorAll("[data-dictionary-row='skill-category']")].forEach((row) => {
+    const category = cleanText(row.querySelector("[data-dictionary-field='category']")?.value || "");
+    const color = normalizeColor(row.querySelector("[data-dictionary-field='color']")?.value || "");
+    if (category) map.set(normalizeDictionaryKey(category), color || getCategoryColor(category) || "#25d6a2");
+  });
+  return map;
+}
+
+function getDictionaryEditor(type) {
+  if (type === "skill") return els.skillDictionaryEditor;
+  if (type === "skill-category") return els.skillCategoryEditor;
+  return els.certificationDictionaryEditor;
 }
 
 function normalizeDictionaryEntries(entries, type) {
@@ -1397,6 +1531,45 @@ function getDictionaryEntries(type) {
     });
 }
 
+function getSkillCategoryEntries() {
+  const map = new Map();
+  getDictionaryEntries("skill").forEach((entry) => {
+    const category = entry.category || inferDictionaryCategory(entry.term, "skill");
+    if (!category || category === "certification") return;
+    const key = normalizeDictionaryKey(category);
+    if (!map.has(key)) {
+      map.set(key, {
+        category,
+        color: normalizeColor(entry.color) || getCategoryColor(category) || "#25d6a2"
+      });
+    }
+  });
+  Object.entries(getDefaultCategoryColors()).forEach(([category, color]) => {
+    if (category === "certification") return;
+    const key = normalizeDictionaryKey(category);
+    if (!map.has(key)) map.set(key, { category, color });
+  });
+  return [...map.values()].sort((a, b) => a.category.localeCompare(b.category, "ja"));
+}
+
+function renderDictionaryCategoryOptions() {
+  const list = document.querySelector("#dictionaryCategoryOptions");
+  if (!list) return;
+  const categories = new Set(getSkillCategoryEntries().map((entry) => entry.category));
+  if (els.skillCategoryEditor) {
+    [...els.skillCategoryEditor.querySelectorAll("[data-dictionary-field='category']")]
+      .map((input) => cleanText(input.value))
+      .filter(Boolean)
+      .forEach((category) => categories.add(category));
+  }
+  list.innerHTML = "";
+  [...categories].sort((a, b) => a.localeCompare(b, "ja")).forEach((category) => {
+    const option = document.createElement("option");
+    option.value = category;
+    list.appendChild(option);
+  });
+}
+
 function normalizeColor(value) {
   const color = cleanText(value);
   return /^#[0-9a-f]{6}$/i.test(color) ? color : "";
@@ -1412,6 +1585,10 @@ function inferDictionaryCategory(term, type) {
 }
 
 function getCategoryColor(category) {
+  return getDefaultCategoryColors()[category] || "";
+}
+
+function getDefaultCategoryColors() {
   return {
     language: "#f89797",
     framework: "#fbbf7e",
@@ -1424,7 +1601,7 @@ function getCategoryColor(category) {
     security: "#fca5a5",
     certification: "#d8b4fe",
     general: "#25d6a2"
-  }[category] || "";
+  };
 }
 
 async function handleCrawl(event) {
