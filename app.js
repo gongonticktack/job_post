@@ -2066,7 +2066,10 @@ function parseManualJobText(text, fallbackCompany) {
     requiredCertifications = necQualifications.must || requiredCertifications;
     preferredCertifications = necQualifications.want || preferredCertifications;
   }
-  const annualIncomeSource = pickSection(normalized, headings.income, parser) || findIncomeText(normalized);
+  const annualIncomeSource = parser.fixedAnnualIncomeRaw
+    || pickSection(normalized, headings.income, parser)
+    || findIncomeText(normalized)
+    || "";
   const income = parseIncome(annualIncomeSource);
   const annualIncomeRaw = formatIncomeRaw(annualIncomeSource, income);
   const location = pickSection(normalized, headings.location, parser);
@@ -2192,10 +2195,10 @@ function setEditorValue(field, value) {
 
 function readManualEditorJob() {
   const get = (field) => els.manualEditor.querySelector(`[data-field="${field}"]`)?.value.trim() || "";
-  const annualIncomeSource = get("annualIncomeRaw");
+  const parser = getCompanyParser(get("company") || state.manualDraft?.company);
+  const annualIncomeSource = parser.fixedAnnualIncomeRaw || get("annualIncomeRaw");
   const income = parseIncome(annualIncomeSource);
   const annualIncomeRaw = formatIncomeRaw(annualIncomeSource, income);
-  const parser = getCompanyParser(get("company") || state.manualDraft?.company);
   const job = {
     ...state.manualDraft,
     company: canonicalCompanyName(get("company") || "未設定"),

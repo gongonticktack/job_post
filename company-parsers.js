@@ -154,6 +154,7 @@ window.JobParserConfig = {
       aliases: ["野村総合研究所", "NRI", "Nomura Research Institute"],
       titlePattern: ".+",
       titleMatchIndex: 0,
+      fixedAnnualIncomeRaw: "600-1300万円",
       headings: {
         company: [],
         description: ["【具体的な職務内容】"],

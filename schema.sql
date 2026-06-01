@@ -298,6 +298,7 @@ VALUES (
     "aliases": ["野村総合研究所", "NRI", "Nomura Research Institute"],
     "titlePattern": ".+",
     "titleMatchIndex": 0,
+    "fixedAnnualIncomeRaw": "600-1300万円",
     "headings": {
       "company": [],
       "description": ["【具体的な職務内容】"],
@@ -327,6 +328,16 @@ VALUES (
 ON CONFLICT (company_name) DO UPDATE
 SET parser_config = EXCLUDED.parser_config,
     enabled = EXCLUDED.enabled;
+
+UPDATE jobs
+SET annual_income_min = 600,
+    annual_income_max = 1300,
+    annual_income_raw = '600-1300万円'
+WHERE company_id IN (
+  SELECT id
+  FROM companies
+  WHERE name IN ('株式会社野村総合研究所', '野村総合研究所', 'NRI')
+);
 
 INSERT INTO dictionary_terms (dictionary_type, term, sort_order)
 VALUES
