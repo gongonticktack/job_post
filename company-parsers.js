@@ -114,12 +114,68 @@ window.JobParserConfig = {
         "勤務地 / Location", "備考 / Notes",
         "【事業・組織構成の概要】", "【職務内容】", "【ポジションのアピールポイント】",
         "【職場環境】", "【求める人物像・ソフトスキル】",
-        "【採用形態・ランク】", "【想定報酬】"
+        "【MUST】", "【WANT】", "【採用形態・ランク】", "【想定報酬】"
       ],
       ignoreSkillPatterns: [
         "必須", "歓迎", "経験", "資格", "主任", "プロフェッショナル", "課長相当",
         "場合", "以下", "以上", "満たすこと", "勤務地", "待遇", "採用形態",
         "求める人物像", "ソフトスキル", "前職年収", "当社規定", "個別相談"
+      ]
+    },
+    "アクセンチュア株式会社": {
+      aliases: ["アクセンチュア", "Accenture", "Accenture Japan"],
+      titlePattern: ".+",
+      titleMatchIndex: 0,
+      headings: {
+        company: [],
+        description: ["業務内容"],
+        appealPoints: ["■プロジェクト事例"],
+        referenceInfo: ["追加情報"],
+        requiredSkills: ["【必須条件】"],
+        requiredLanguage: [],
+        requiredCertifications: ["【必須条件】"],
+        preferredSkills: ["【歓迎要件】"],
+        preferredLanguage: [],
+        preferredCertifications: ["【歓迎要件】"],
+        income: [],
+        location: ["【勤務地】", "勤務地"]
+      },
+      sectionHeadings: [
+        "業務内容", "募集要項", "【必須条件】", "【歓迎要件】", "【勤務地】",
+        "■プロジェクト事例", "※このような志をお持ちの方を特に歓迎しております※",
+        "勤務地", "追加情報", "雇用機会の均等化に関する声明", "会社情報"
+      ],
+      ignoreSkillPatterns: [
+        "必須", "歓迎", "経験", "要件", "条件", "お持ち", "方", "勤務地", "募集要項",
+        "尚歓迎", "英語力", "ビジネスレベル", "志", "人", "等々", "追加情報", "会社情報"
+      ]
+    },
+    "株式会社野村総合研究所": {
+      aliases: ["野村総合研究所", "NRI", "Nomura Research Institute"],
+      titlePattern: ".+",
+      titleMatchIndex: 0,
+      headings: {
+        company: [],
+        description: ["【具体的な職務内容】"],
+        appealPoints: ["【仕事の魅力・やりがい・キャリアパス】"],
+        referenceInfo: ["【組織の概要】"],
+        requiredSkills: ["【必須スキル・経験・資格】"],
+        requiredLanguage: [],
+        requiredCertifications: ["【必須スキル・経験・資格】"],
+        preferredSkills: ["【歓迎するスキル・経験・資格】"],
+        preferredLanguage: [],
+        preferredCertifications: ["【歓迎するスキル・経験・資格】"],
+        income: [],
+        location: ["勤務地"]
+      },
+      sectionHeadings: [
+        "職務内容", "登録資格", "勤務地", "【配属想定組織】", "【組織の概要】",
+        "【募集職種の期待役割】", "【具体的な職務内容】", "【仕事の魅力・やりがい・キャリアパス】",
+        "【必須スキル・経験・資格】", "【歓迎するスキル・経験・資格】"
+      ],
+      ignoreSkillPatterns: [
+        "必須", "歓迎", "経験", "資格", "以下", "いずれ", "顧客", "お客さま", "案件",
+        "行った", "関わった", "複数", "業界", "一連", "クラス", "ご経験"
       ]
     }
   },
@@ -127,7 +183,7 @@ window.JobParserConfig = {
     "JavaScript", "TypeScript", "Python", "Java", "C#", "C++", "Go", "Ruby", "PHP",
     "SQL", "AWS", "Azure", "GCP", "Docker", "Kubernetes", "React", "Vue", "Angular",
     "Spring", "Linux", "Git", "SCM", "ERP", "SAP", "SAP S/4HANA", "Oracle Cloud SCM",
-    "Kinaxis", "Kinaxis Maestro", "Anaplan", "O9", "mcframe", "PMP", "IPA", "ASCM",
+    "Kinaxis", "Kinaxis Maestro", "Anaplan", "O9", "mcframe", "PMP", "ASCM",
     "CPIM", "CSCP", "CLTD", "IoT", "DX", "要件定義", "設計", "開発", "運用",
     "クラウド", "データ分析", "データサイエンス", "データサイエンティスト",
     "医療データ", "医療情報", "ビッグデータ", "データ解析", "統計解析",
@@ -215,13 +271,18 @@ window.JobParserConfig = {
     "導入コンサル", "プリセールス", "セールスエンジニア", "技術支援", "顧客支援",
     "プロジェクト推進", "プロジェクト管理", "開発リード", "技術リード", "アーキテクト",
     "アーキテクチャ設計", "ソリューション設計", "要件整理", "課題解決", "改善提案",
-    "医療DX", "ガバメントクラウド",
+    "医療DX", "ガバメントクラウド", "BPO", "RPA", "業務改革", "コンサルティング",
+    "システム構築", "デジタルトランスフォーメーション", "業務移管", "案件立上げ",
+    "事業立上げ", "組織変革", "デジタル変革", "SI営業", "新規顧客開拓",
+    "アカウントマネジメント", "ソリューション企画", "金額交渉", "業務要件定義",
+    "システム構想", "CXO",
     "官公庁", "公共", "社会保障", "顧客課題", "顧客ニーズ", "クラウドネイティブ"
   ],
   certificationDictionary: [
-    "PMP", "プロジェクトマネージャ試験", "システムアーキテクト試験", "データベーススペシャリスト",
+    "PMP", "プロジェクトマネージャ", "システムアーキテクト", "データベーススペシャリスト",
     "ネットワークスペシャリスト", "情報処理安全確保支援士", "ASCM", "CPIM", "CSCP", "CLTD",
     "SAP S/4HANA", "Oracle Cloud SCM", "Kinaxis Maestro", "Anaplan", "mcframe",
+    "ITパスポート", "情報セキュリティマネジメント",
     "応用情報技術者", "基本情報技術者", "AWS Certified Solutions Architect",
     "AWS Certified Developer", "AWS Certified SysOps Administrator",
     "Azure Administrator", "Azure Solutions Architect", "Google Cloud Professional Cloud Architect",
@@ -236,8 +297,8 @@ window.JobParserConfig = {
     "Oracle Certified Java Programmer", "Oracle Certified Professional",
     "Oracle Master", "CCNA", "CCNP", "LPIC", "LinuC", "CISSP", "CISA", "CISM",
     "CompTIA Security+", "簿記", "簿記3級", "簿記2級",
-    "ITストラテジスト試験", "エンベデッドシステムスペシャリスト試験",
-    "ITサービスマネージャ試験", "システム監査技術者試験",
+    "ITストラテジスト", "エンベデッドシステムスペシャリスト",
+    "ITサービスマネージャ", "システム監査技術者",
     "AWS Certified AI Practitioner", "AWS Certified CloudOps Engineer - Associate",
     "AWS Certified Data Engineer - Associate", "AWS Certified Developer - Associate",
     "AWS Certified Machine Learning Engineer - Associate",
@@ -258,7 +319,6 @@ window.JobParserConfig = {
     "Professional Cloud Architect", "Professional Cloud Database Engineer",
     "Professional Cloud Developer", "Professional Data Engineer", "Professional Cloud DevOps Engineer",
     "Professional Cloud Security Engineer", "Professional Cloud Network Engineer",
-    "Professional Machine Learning Engineer", "Professional Security Operations Engineer",
-    "情報処理安全確保支援士試験"
+    "Professional Machine Learning Engineer", "Professional Security Operations Engineer"
   ]
 };

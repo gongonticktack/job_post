@@ -224,6 +224,105 @@ VALUES (
     ]
   }'::jsonb,
   TRUE
+),
+(
+  'NEC',
+  '{
+    "aliases": ["日本電気株式会社", "NEC Corporation", "日本電気"],
+    "titlePattern": "^\\d+\\s+.+",
+    "titleMatchIndex": 0,
+    "headings": {
+      "company": [],
+      "description": ["【職務内容】"],
+      "appealPoints": ["【ポジションのアピールポイント】"],
+      "referenceInfo": ["【職場環境】", "備考 / Notes"],
+      "requiredSkills": ["応募資格 / Qualifications"],
+      "requiredLanguage": [],
+      "requiredCertifications": ["応募資格 / Qualifications"],
+      "preferredSkills": ["【WANT】"],
+      "preferredLanguage": [],
+      "preferredCertifications": ["【WANT】"],
+      "income": ["【想定報酬】"],
+      "location": ["勤務地 / Location"]
+    },
+    "sectionHeadings": [
+      "職務内容 / Job duties", "応募資格 / Qualifications", "待遇 / Salary & Benefits",
+      "勤務地 / Location", "備考 / Notes",
+      "【事業・組織構成の概要】", "【職務内容】", "【ポジションのアピールポイント】",
+      "【職場環境】", "【求める人物像・ソフトスキル】",
+      "【MUST】", "【WANT】", "【採用形態・ランク】", "【想定報酬】"
+    ],
+    "ignoreSkillPatterns": [
+      "必須", "歓迎", "経験", "資格", "主任", "プロフェッショナル", "課長相当",
+      "場合", "以下", "以上", "満たすこと", "勤務地", "待遇", "採用形態",
+      "求める人物像", "ソフトスキル", "前職年収", "当社規定", "個別相談"
+    ]
+  }'::jsonb,
+  TRUE
+),
+(
+  'アクセンチュア株式会社',
+  '{
+    "aliases": ["アクセンチュア", "Accenture", "Accenture Japan"],
+    "titlePattern": ".+",
+    "titleMatchIndex": 0,
+    "headings": {
+      "company": [],
+      "description": ["業務内容"],
+      "appealPoints": ["■プロジェクト事例"],
+      "referenceInfo": ["追加情報"],
+      "requiredSkills": ["【必須条件】"],
+      "requiredLanguage": [],
+      "requiredCertifications": ["【必須条件】"],
+      "preferredSkills": ["【歓迎要件】"],
+      "preferredLanguage": [],
+      "preferredCertifications": ["【歓迎要件】"],
+      "income": [],
+      "location": ["【勤務地】", "勤務地"]
+    },
+    "sectionHeadings": [
+      "業務内容", "募集要項", "【必須条件】", "【歓迎要件】", "【勤務地】",
+      "■プロジェクト事例", "※このような志をお持ちの方を特に歓迎しております※",
+      "勤務地", "追加情報", "雇用機会の均等化に関する声明", "会社情報"
+    ],
+    "ignoreSkillPatterns": [
+      "必須", "歓迎", "経験", "要件", "条件", "お持ち", "方", "勤務地", "募集要項",
+      "尚歓迎", "英語力", "ビジネスレベル", "志", "人", "等々", "追加情報", "会社情報"
+    ]
+  }'::jsonb,
+  TRUE
+),
+(
+  '株式会社野村総合研究所',
+  '{
+    "aliases": ["野村総合研究所", "NRI", "Nomura Research Institute"],
+    "titlePattern": ".+",
+    "titleMatchIndex": 0,
+    "headings": {
+      "company": [],
+      "description": ["【具体的な職務内容】"],
+      "appealPoints": ["【仕事の魅力・やりがい・キャリアパス】"],
+      "referenceInfo": ["【組織の概要】"],
+      "requiredSkills": ["【必須スキル・経験・資格】"],
+      "requiredLanguage": [],
+      "requiredCertifications": ["【必須スキル・経験・資格】"],
+      "preferredSkills": ["【歓迎するスキル・経験・資格】"],
+      "preferredLanguage": [],
+      "preferredCertifications": ["【歓迎するスキル・経験・資格】"],
+      "income": [],
+      "location": ["勤務地"]
+    },
+    "sectionHeadings": [
+      "職務内容", "登録資格", "勤務地", "【配属想定組織】", "【組織の概要】",
+      "【募集職種の期待役割】", "【具体的な職務内容】", "【仕事の魅力・やりがい・キャリアパス】",
+      "【必須スキル・経験・資格】", "【歓迎するスキル・経験・資格】"
+    ],
+    "ignoreSkillPatterns": [
+      "必須", "歓迎", "経験", "資格", "以下", "いずれ", "顧客", "お客さま", "案件",
+      "行った", "関わった", "複数", "業界", "一連", "クラス", "ご経験"
+    ]
+  }'::jsonb,
+  TRUE
 )
 ON CONFLICT (company_name) DO UPDATE
 SET parser_config = EXCLUDED.parser_config,
@@ -263,7 +362,6 @@ VALUES
   ('skill', 'O9', 30),
   ('skill', 'mcframe', 31),
   ('skill', 'PMP', 32),
-  ('skill', 'IPA', 33),
   ('skill', 'ASCM', 34),
   ('skill', 'CPIM', 35),
   ('skill', 'CSCP', 36),
@@ -457,12 +555,30 @@ VALUES
   ('skill', 'AKS', 612),
   ('skill', 'Cloud Run', 613),
   ('skill', 'Lambda', 614),
+  ('skill', 'BPO', 615),
+  ('skill', 'RPA', 616),
+  ('skill', '業務改革', 617),
+  ('skill', 'コンサルティング', 618),
+  ('skill', 'システム構築', 619),
+  ('skill', 'デジタルトランスフォーメーション', 620),
+  ('skill', '業務移管', 621),
+  ('skill', '案件立上げ', 622),
+  ('skill', '事業立上げ', 623),
+  ('skill', '組織変革', 624),
+  ('skill', 'デジタル変革', 625),
+  ('skill', 'SI営業', 626),
+  ('skill', '新規顧客開拓', 627),
+  ('skill', 'アカウントマネジメント', 628),
+  ('skill', 'ソリューション企画', 629),
+  ('skill', '金額交渉', 630),
+  ('skill', '業務要件定義', 631),
+  ('skill', 'システム構想', 632),
+  ('skill', 'CXO', 633),
   ('certification', 'PMP', 1),
-  ('certification', 'IPA', 2),
   ('certification', 'プロジェクトマネージャ', 3),
   ('certification', 'システムアーキテクト', 4),
-  ('certification', 'データベース', 5),
-  ('certification', 'ネットワーク', 6),
+  ('certification', 'データベーススペシャリスト', 5),
+  ('certification', 'ネットワークスペシャリスト', 6),
   ('certification', '情報処理安全確保支援士', 7),
   ('certification', 'ASCM', 8),
   ('certification', 'CPIM', 9),
@@ -516,10 +632,10 @@ VALUES
   ('certification', '簿記', 533),
   ('certification', '簿記3級', 534),
   ('certification', '簿記2級', 535),
-  ('certification', 'ITストラテジスト試験', 536),
-  ('certification', 'エンベデッドシステムスペシャリスト試験', 537),
-  ('certification', 'ITサービスマネージャ試験', 538),
-  ('certification', 'システム監査技術者試験', 539),
+  ('certification', 'ITストラテジスト', 536),
+  ('certification', 'エンベデッドシステムスペシャリスト', 537),
+  ('certification', 'ITサービスマネージャ', 538),
+  ('certification', 'システム監査技術者', 539),
   ('certification', 'AWS Certified AI Practitioner', 540),
   ('certification', 'AWS Certified CloudOps Engineer - Associate', 541),
   ('certification', 'AWS Certified Data Engineer - Associate', 542),
@@ -555,10 +671,23 @@ VALUES
   ('certification', 'Professional Cloud Network Engineer', 572),
   ('certification', 'Professional Machine Learning Engineer', 573),
   ('certification', 'Professional Security Operations Engineer', 574),
-  ('certification', '情報処理安全確保支援士試験', 575)
+  ('certification', 'ITパスポート', 575),
+  ('certification', '情報セキュリティマネジメント', 576)
 ON CONFLICT (dictionary_type, term) DO UPDATE
 SET sort_order = EXCLUDED.sort_order,
     updated_at = NOW();
+
+DELETE FROM dictionary_terms
+WHERE (dictionary_type = 'skill' AND term = 'IPA')
+   OR (dictionary_type = 'certification' AND term IN (
+     'IPA', 'データベース', 'ネットワーク',
+     'プロジェクトマネージャ試験', 'システムアーキテクト試験',
+     'データベーススペシャリスト試験', 'ネットワークスペシャリスト試験',
+     '情報処理安全確保支援士試験', '応用情報技術者試験', '基本情報技術者試験',
+     'ITパスポート試験', '情報セキュリティマネジメント試験', 'ITストラテジスト試験',
+     'エンベデッドシステムスペシャリスト試験', 'ITサービスマネージャ試験',
+     'システム監査技術者試験'
+   ));
 
 INSERT INTO dictionary_categories (dictionary_type, category, color, sort_order)
 VALUES
@@ -717,7 +846,8 @@ WHERE dt.dictionary_type = 'skill'
   AND term IN (
     '要件定義', '設計', '開発', '運用', '仕様定義', '上流工程', '詳細設計', 'テスト',
     '基本設計', '外部設計', '内部設計', '単体テスト', '結合テスト', '総合テスト', 'UAT',
-    '品質保証', 'QA', 'テスト自動化', 'アジャイル', 'スクラム', 'ウォーターフォール', 'API設計'
+    '品質保証', 'QA', 'テスト自動化', 'アジャイル', 'スクラム', 'ウォーターフォール', 'API設計',
+    '業務要件定義', 'システム構想'
   );
 
 UPDATE dictionary_terms dt
@@ -731,7 +861,8 @@ WHERE dt.dictionary_type = 'skill'
     'プロジェクトマネジメント', 'ステークホルダーマネジメント', 'チームリード', 'QCD', '顧客折衝',
     'PL', 'PM', 'PMO', 'WBS', '課題管理', 'リスク管理', '進捗管理', '予算管理',
     'ベンダーマネジメント', 'ベンダーコントロール', 'ピープルマネジメント', 'プロダクトマネジメント',
-    'プロダクトオーナー', 'PdM', 'PO', 'チームマネジメント'
+    'プロダクトオーナー', 'PdM', 'PO', 'チームマネジメント', 'SI営業', '新規顧客開拓',
+    'アカウントマネジメント', 'ソリューション企画', '金額交渉', 'CXO'
   );
 
 UPDATE dictionary_terms dt

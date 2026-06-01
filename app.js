@@ -36,15 +36,21 @@ const CERTIFICATION_ALIASES = {
   "psm": "Professional Scrum Master",
   "pspo": "Professional Scrum Product Owner",
   "itil foundation": "ITIL",
-  "プロジェクトマネージャ": "プロジェクトマネージャ試験",
-  "プロジェクトマネージャ試験": "プロジェクトマネージャ試験",
-  "システムアーキテクト": "システムアーキテクト試験",
-  "システムアーキテクト試験": "システムアーキテクト試験",
+  "プロジェクトマネージャ試験": "プロジェクトマネージャ",
+  "システムアーキテクト試験": "システムアーキテクト",
   "データベース": "データベーススペシャリスト",
-  "データベーススペシャリスト": "データベーススペシャリスト",
+  "データベーススペシャリスト試験": "データベーススペシャリスト",
   "ネットワーク": "ネットワークスペシャリスト",
-  "ネットワークスペシャリスト": "ネットワークスペシャリスト",
-  "情報処理安全確保支援士": "情報処理安全確保支援士試験"
+  "ネットワークスペシャリスト試験": "ネットワークスペシャリスト",
+  "情報処理安全確保支援士試験": "情報処理安全確保支援士",
+  "応用情報技術者試験": "応用情報技術者",
+  "基本情報技術者試験": "基本情報技術者",
+  "itパスポート試験": "ITパスポート",
+  "情報セキュリティマネジメント試験": "情報セキュリティマネジメント",
+  "itストラテジスト試験": "ITストラテジスト",
+  "エンベデッドシステムスペシャリスト試験": "エンベデッドシステムスペシャリスト",
+  "itサービスマネージャ試験": "ITサービスマネージャ",
+  "システム監査技術者試験": "システム監査技術者"
 };
 const EXCLUDED_CERTIFICATIONS = new Set(["ipa", "情報処理技術者"]);
 const EXCLUDED_SKILL_PATTERNS = [
@@ -185,6 +191,7 @@ async function loadDictionarySettings() {
       }
       config.dictionaryMeta = remote.dictionaryMeta;
       config.dictionaryCategories = remote.dictionaryCategories;
+      normalizeLoadedSkillDictionary(config);
       normalizeLoadedCertificationDictionary(config);
       return;
     } catch (error) {
@@ -205,7 +212,12 @@ async function loadDictionarySettings() {
   if (!config.certificationDictionary?.length) {
     config.certificationDictionary = [...(config.defaultCertificationDictionary || [])];
   }
+  normalizeLoadedSkillDictionary(config);
   normalizeLoadedCertificationDictionary(config);
+}
+
+function normalizeLoadedSkillDictionary(config) {
+  config.skillDictionary = (config.skillDictionary || []).filter((skill) => normalizeSkill(skill).toLowerCase() !== "ipa");
 }
 
 function normalizeLoadedCertificationDictionary(config) {
@@ -2043,15 +2055,17 @@ function parseManualJobText(text, fallbackCompany) {
   const referenceInfo = pickSection(normalized, headings.referenceInfo, parser) || "";
   let requiredSkillsRaw = pickSection(normalized, headings.requiredSkills, parser);
   let preferredSkillsRaw = pickSection(normalized, headings.preferredSkills, parser);
+  const requiredLanguage = pickSection(normalized, headings.requiredLanguage, parser);
+  let requiredCertifications = pickSection(normalized, headings.requiredCertifications, parser);
+  const preferredLanguage = pickSection(normalized, headings.preferredLanguage, parser);
+  let preferredCertifications = pickSection(normalized, headings.preferredCertifications, parser);
   if (company === "NEC") {
     const necQualifications = extractNecQualificationBlocks(normalized);
     requiredSkillsRaw = necQualifications.must || requiredSkillsRaw;
     preferredSkillsRaw = necQualifications.want || preferredSkillsRaw;
+    requiredCertifications = necQualifications.must || requiredCertifications;
+    preferredCertifications = necQualifications.want || preferredCertifications;
   }
-  const requiredLanguage = pickSection(normalized, headings.requiredLanguage, parser);
-  const requiredCertifications = pickSection(normalized, headings.requiredCertifications, parser);
-  const preferredLanguage = pickSection(normalized, headings.preferredLanguage, parser);
-  const preferredCertifications = pickSection(normalized, headings.preferredCertifications, parser);
   const annualIncomeSource = pickSection(normalized, headings.income, parser) || findIncomeText(normalized);
   const income = parseIncome(annualIncomeSource);
   const annualIncomeRaw = formatIncomeRaw(annualIncomeSource, income);
@@ -2230,7 +2244,15 @@ function getCompanyParser(company) {
 function detectCompanyFromText(text, fallbackCompany) {
   if (/株式会社NTTデータ|NTTデータ株式会社|NTT\s*データ|NTT\s*DATA/i.test(text)) return canonicalCompanyName("株式会社NTTデータ");
   if (/富士通株式会社|富士通\s*Japan\s*株式会社|Fujitsu\s*Japan|Fujitsu/i.test(text)) return canonicalCompanyName("富士通株式会社");
-  if (/日本電気株式会社|\bNEC\b|医療DX|厚生労働省/.test(text)) return canonicalCompanyName("NEC");
+  if (/日本電気株式会社|(?:^|[^A-Za-z0-9_])NEC(?:-G)?(?:$|[^A-Za-z0-9_])|医療DX|厚生労働省/.test(text)) {
+    return canonicalCompanyName("NEC");
+  }
+  if (/アクセンチュア|(?:^|[^A-Za-z0-9_])Accenture(?:$|[^A-Za-z0-9_])/i.test(text)) {
+    return canonicalCompanyName("アクセンチュア株式会社");
+  }
+  if (/野村総合研究所|(?:^|[^A-Za-z0-9_])NRI(?:$|[^A-Za-z0-9_])/.test(text)) {
+    return canonicalCompanyName("株式会社野村総合研究所");
+  }
   if (/EC本部|トヨタ自動車|トヨタグループ|Teamcenter|TargetLink/.test(text)) {
     return canonicalCompanyName("株式会社トヨタシステムズ");
   }
