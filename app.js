@@ -1085,7 +1085,8 @@ function renderWordCloud(container, counts, type = "skill", key = "") {
     item.type = "button";
     const rgb = colorToRgb(meta.color);
     if (rgb) item.style.setProperty("--word-rgb", rgb);
-    item.style.setProperty("--size", selected ? "17px" : `${12 + weight * 30}px`);
+    const size = type === "certification" ? "13px" : selected ? "17px" : `${12 + weight * 30}px`;
+    item.style.setProperty("--size", size);
     item.style.setProperty("--alpha", `${0.46 + weight * 0.54}`);
     item.style.setProperty("--delay", `${index * 16}ms`);
     item.title = `${name}: ${count}件`;
