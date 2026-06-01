@@ -614,7 +614,7 @@ select {
 }
 
 .income {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   max-width: 100%;
   height: fit-content;
   padding: 6px 10px;
@@ -624,8 +624,7 @@ select {
   color: var(--accent-strong);
   font-weight: 800;
   font-size: 13px;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .skill-block {
@@ -1135,7 +1134,6 @@ label {
   .income {
     width: fit-content;
     max-width: 100%;
-    white-space: normal;
   }
 
   textarea {

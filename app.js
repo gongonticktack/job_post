@@ -8,9 +8,29 @@ const CERTIFICATION_ALIASES = {
   "project management professional": "PMP",
   "project manager professional": "PMP",
   "pmp": "PMP",
-  "aws certified solutions architect - associate": "AWS Certified Solutions Architect",
-  "aws certified solutions architect associate": "AWS Certified Solutions Architect",
-  "aws solutions architect": "AWS Certified Solutions Architect",
+  "aws certified solutions architect": "AWS Certified Solutions Architect - Associate",
+  "aws certified solutions architect - associate": "AWS Certified Solutions Architect - Associate",
+  "aws certified solutions architect associate": "AWS Certified Solutions Architect - Associate",
+  "aws solutions architect": "AWS Certified Solutions Architect - Associate",
+  "aws certified developer": "AWS Certified Developer - Associate",
+  "aws certified sysops administrator": "AWS Certified CloudOps Engineer - Associate",
+  "aws certified devops engineer": "AWS Certified DevOps Engineer - Professional",
+  "aws certified security": "AWS Certified Security - Specialty",
+  "aws certified machine learning": "AWS Certified Machine Learning - Specialty",
+  "google cloud cloud digital leader": "Cloud Digital Leader",
+  "google cloud generative ai leader": "Generative AI Leader",
+  "google cloud associate cloud engineer": "Associate Cloud Engineer",
+  "google cloud associate google workspace administrator": "Associate Google Workspace Administrator",
+  "google cloud associate data practitioner": "Associate Data Practitioner",
+  "google cloud professional cloud architect": "Professional Cloud Architect",
+  "google cloud professional cloud database engineer": "Professional Cloud Database Engineer",
+  "google cloud professional cloud developer": "Professional Cloud Developer",
+  "google cloud professional data engineer": "Professional Data Engineer",
+  "google cloud professional cloud devops engineer": "Professional Cloud DevOps Engineer",
+  "google cloud professional cloud security engineer": "Professional Cloud Security Engineer",
+  "google cloud professional cloud network engineer": "Professional Cloud Network Engineer",
+  "google cloud professional machine learning engineer": "Professional Machine Learning Engineer",
+  "google cloud professional security operations engineer": "Professional Security Operations Engineer",
   "csm": "Certified ScrumMaster",
   "cspo": "Certified Scrum Product Owner",
   "psm": "Professional Scrum Master",
@@ -23,7 +43,8 @@ const CERTIFICATION_ALIASES = {
   "データベース": "データベーススペシャリスト",
   "データベーススペシャリスト": "データベーススペシャリスト",
   "ネットワーク": "ネットワークスペシャリスト",
-  "ネットワークスペシャリスト": "ネットワークスペシャリスト"
+  "ネットワークスペシャリスト": "ネットワークスペシャリスト",
+  "情報処理安全確保支援士": "情報処理安全確保支援士試験"
 };
 const EXCLUDED_CERTIFICATIONS = new Set(["ipa", "情報処理技術者"]);
 const EXCLUDED_SKILL_PATTERNS = [
@@ -188,7 +209,10 @@ async function loadDictionarySettings() {
 }
 
 function normalizeLoadedCertificationDictionary(config) {
-  config.certificationDictionary = [...new Set((config.certificationDictionary || [])
+  config.certificationDictionary = [...new Set([
+    ...(config.certificationDictionary || []),
+    ...(config.defaultCertificationDictionary || [])
+  ]
     .map(normalizeCertification)
     .filter(Boolean))];
 }
