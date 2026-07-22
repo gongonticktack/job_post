@@ -398,9 +398,6 @@ select {
 .income-filter {
   display: grid;
   gap: 10px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
 }
 
 .income-filter-head,
@@ -501,10 +498,6 @@ select {
   box-shadow: 0 0 0 3px rgba(37, 214, 162, 0.18), 0 8px 20px rgba(0, 0, 0, 0.28);
   cursor: pointer;
   pointer-events: auto;
-}
-
-.income-filter .compact-button {
-  justify-self: start;
 }
 
 .cloud-word {
@@ -757,7 +750,8 @@ select {
   gap: 8px;
 }
 
-.skill-block dt {
+.skill-block dt,
+.skill-label {
   color: var(--accent-strong);
   font-weight: 800;
 }

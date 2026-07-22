@@ -61,9 +61,16 @@
                 </div>
               </div>
               <div id="skillChart" class="skill-chart empty">データがありません</div>
+            </section>
+
+            <section class="panel compact-panel">
+              <div class="panel-head">
+                <h2>年収フィルタ</h2>
+                <button id="resetIncomeFilter" class="ghost-button compact-button" type="button" hidden>年収条件リセット</button>
+              </div>
               <div class="income-filter" aria-label="年収フィルタ">
                 <div class="income-filter-head">
-                  <span>年収フィルタ</span>
+                  <span>範囲</span>
                   <strong id="incomeFilterValue">指定なし</strong>
                 </div>
                 <div class="income-range-control">
@@ -74,7 +81,6 @@
                   <span id="incomeFilterMinLabel">0万円</span>
                   <span id="incomeFilterMaxLabel">3000万円</span>
                 </div>
-                <button id="resetIncomeFilter" class="ghost-button compact-button" type="button" hidden>年収条件リセット</button>
               </div>
             </section>
 
@@ -240,7 +246,7 @@
         </div>
         <div class="match-summary" hidden></div>
         <div class="job-meta"></div>
-        <dl class="skill-block">
+        <div class="skill-block">
           <div class="collapsible-skill">
             <details>
               <summary>必須</summary>
@@ -248,7 +254,7 @@
             </details>
           </div>
           <div>
-            <dt>推奨</dt>
+            <span class="skill-label">推奨</span>
             <dd class="preferred"></dd>
           </div>
           <div class="collapsible-skill">
@@ -257,7 +263,7 @@
               <dd class="certifications"></dd>
             </details>
           </div>
-        </dl>
+        </div>
         <details class="job-detail-block">
           <summary>職務内容・補足</summary>
           <section>
