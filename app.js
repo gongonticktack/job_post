@@ -9,6 +9,7 @@ const INCOME_FILTER_MAX = 3000;
 const INCOME_FILTER_STEP = 50;
 const SKILL_TREND_VISIBLE_LIMIT = 10;
 const CERTIFICATION_TREND_VISIBLE_LIMIT = 8;
+const COMPANY_TREND_VISIBLE_LIMIT = 4;
 const CERTIFICATION_ALIASES = {
   "project management professional": "PMP",
   "project manager professional": "PMP",
@@ -100,6 +101,8 @@ const els = {
   resetIncomeFilter: document.querySelector("#resetIncomeFilter"),
   certificationChart: document.querySelector("#certificationChart"),
   resetCertificationFilters: document.querySelector("#resetCertificationFilters"),
+  companyChart: document.querySelector("#companyChart"),
+  resetCompanyFilters: document.querySelector("#resetCompanyFilters"),
   searchInput: document.querySelector("#searchInput"),
   sortMenuButton: document.querySelector("#sortMenuButton"),
   sortMenu: document.querySelector("#sortMenu"),
@@ -169,11 +172,16 @@ function bindEvents() {
     clearFacetFilters("certification");
     render();
   });
-  [els.skillChart, els.certificationChart].forEach((chart) => {
+  els.resetCompanyFilters.addEventListener("click", () => {
+    clearFacetFilters("company");
+    render();
+  });
+  [els.skillChart, els.certificationChart, els.companyChart].forEach((chart) => {
     chart.addEventListener("click", (event) => {
       if (event.target !== chart) return;
       if (chart === els.skillChart) clearFacetFilters("skill");
       if (chart === els.certificationChart) clearFacetFilters("certification");
+      if (chart === els.companyChart) clearFacetFilters("company");
       render();
     });
   });
@@ -980,6 +988,7 @@ function render() {
   renderFilterControls();
   renderSkillChart(visibleJobs);
   renderCertificationChart(visibleJobs);
+  renderCompanyChart(visibleJobs);
   renderJobList(els.jobList, sortedJobs);
   renderSettingsJobList();
 }
@@ -987,12 +996,15 @@ function render() {
 function renderFilterControls() {
   const skillCount = countActiveFilters("skill");
   const certificationCount = countActiveFilters("certification");
+  const companyCount = countActiveFilters("company");
   updateIncomeFilterControls();
   updateSortControls();
   els.resetSkillFilters.hidden = skillCount === 0;
   els.resetCertificationFilters.hidden = certificationCount === 0;
+  els.resetCompanyFilters.hidden = companyCount === 0;
   els.resetSkillFilters.textContent = skillCount ? `スキル条件リセット (${skillCount})` : "スキル条件リセット";
   els.resetCertificationFilters.textContent = certificationCount ? `資格条件リセット (${certificationCount})` : "資格条件リセット";
+  els.resetCompanyFilters.textContent = companyCount ? `企業条件リセット (${companyCount})` : "企業条件リセット";
 }
 
 function toggleSortMenu(event) {
@@ -1188,10 +1200,22 @@ function renderCertificationChart(jobs) {
   renderWordCloud(els.certificationChart, counts, "certification");
 }
 
+function renderCompanyChart(jobs) {
+  const counts = countCompanies(jobs).map(({ name, count }) => ({ name, count }));
+  els.companyChart.innerHTML = "";
+  els.companyChart.classList.toggle("empty", counts.length === 0);
+  els.companyChart.classList.toggle("word-cloud", counts.length > 0);
+  if (!counts.length) {
+    els.companyChart.textContent = "データがありません";
+    return;
+  }
+  renderWordCloud(els.companyChart, counts, "company");
+}
+
 function renderWordCloud(container, counts, type = "skill", key = "") {
   const max = counts[0].count;
   const visibleCounts = prioritizeSelectedCounts(counts, type, key);
-  const limit = type === "certification" ? CERTIFICATION_TREND_VISIBLE_LIMIT : SKILL_TREND_VISIBLE_LIMIT;
+  const limit = getTrendVisibleLimit(type);
   const primaryCounts = visibleCounts.slice(0, limit);
   const collapsedCounts = visibleCounts.slice(limit);
   renderWordCloudItems(container, primaryCounts, max, type, key, 0);
@@ -1200,12 +1224,23 @@ function renderWordCloud(container, counts, type = "skill", key = "") {
   const details = document.createElement("details");
   details.className = "trend-collapse";
   const summary = document.createElement("summary");
-  summary.textContent = `さらに表示 (${collapsedCounts.length})`;
+  const openLabel = "閉じる";
+  const closedLabel = `さらに表示 (${collapsedCounts.length})`;
+  summary.textContent = closedLabel;
   const body = document.createElement("div");
   body.className = "trend-collapse-body";
   details.append(summary, body);
+  details.addEventListener("toggle", () => {
+    summary.textContent = details.open ? openLabel : closedLabel;
+  });
   container.appendChild(details);
   renderWordCloudItems(body, collapsedCounts, max, type, key, primaryCounts.length);
+}
+
+function getTrendVisibleLimit(type) {
+  if (type === "certification") return CERTIFICATION_TREND_VISIBLE_LIMIT;
+  if (type === "company") return COMPANY_TREND_VISIBLE_LIMIT;
+  return SKILL_TREND_VISIBLE_LIMIT;
 }
 
 function renderWordCloudItems(container, counts, max, type, key, startIndex = 0) {
@@ -1218,7 +1253,7 @@ function renderWordCloudItems(container, counts, max, type, key, startIndex = 0)
     item.type = "button";
     const rgb = colorToRgb(meta.color);
     if (rgb) item.style.setProperty("--word-rgb", rgb);
-    const size = type === "certification" ? "13px" : selected ? "17px" : `${12 + weight * 30}px`;
+    const size = type === "certification" ? "13px" : `${12 + weight * 30}px`;
     item.style.setProperty("--size", size);
     item.style.setProperty("--alpha", `${0.46 + weight * 0.54}`);
     item.style.setProperty("--delay", `${(startIndex + index) * 16}ms`);
@@ -1246,11 +1281,13 @@ function prioritizeSelectedCounts(counts, type, key = "") {
 }
 
 function getDictionaryMeta(name, type) {
+  if (type === "company") return {};
   const meta = window.JobParserConfig?.dictionaryMeta?.[type]?.[normalizeDictionaryKey(name)];
   return meta || {};
 }
 
 function getWordCategoryClass(name, type, meta = {}) {
+  if (type === "company") return "word-company";
   if (meta.category) return `word-${meta.category}`;
   if (type === "certification") return "word-certification";
   const value = normalizeSkill(name).toLowerCase();
@@ -1356,6 +1393,7 @@ function isSameFacetFilter(filter, type, key, normalizedName) {
 }
 
 function normalizeFacetName(name, type) {
+  if (type === "company") return canonicalCompanyName(name);
   return type === "certification" ? normalizeCertification(name) : normalizeSkill(name);
 }
 
@@ -1644,6 +1682,10 @@ function filterJobsByFacet(jobs, filter) {
   if (filter.type === "certification") {
     return jobs.filter((job) => getJobCertifications(job)
       .some((certification) => normalizeCertification(certification).toLowerCase() === filter.normalizedName));
+  }
+
+  if (filter.type === "company") {
+    return jobs.filter((job) => canonicalCompanyName(job.company || "").toLowerCase() === filter.normalizedName);
   }
 
   if (filter.type === "skill" && filter.key) {
@@ -2492,7 +2534,7 @@ function getCompanyParser(company) {
 
 function detectCompanyFromText(text, fallbackCompany) {
   if (/株式会社NTTデータ|NTTデータ株式会社|NTT\s*データ|NTT\s*DATA/i.test(text)) return canonicalCompanyName("株式会社NTTデータ");
-  if (/日本アイ・ビー・エム株式会社|日本IBM|IBM\s*Japan|(?:^|[^A-Za-z0-9_])IBM(?:$|[^A-Za-z0-9_])/i.test(text)) return canonicalCompanyName("日本アイ・ビー・エム株式会社");
+  if (/日本アイ・ビー・エム株式会社|日本IBM|日本アイ・ビー・エムデジタルサービス|IJDS|IBM\s*Japan|IBM\s*Japan\s*Digital\s*Services|(?:^|[^A-Za-z0-9_])IBM(?:$|[^A-Za-z0-9_])/i.test(text)) return canonicalCompanyName("日本アイ・ビー・エム株式会社");
   if (/トヨタ自動車株式会社|トヨタ自動車|TOYOTA\s*MOTOR|Toyota\s*Motor/i.test(text)) return canonicalCompanyName("トヨタ自動車株式会社");
   if (/富士通株式会社|富士通\s*Japan\s*株式会社|Fujitsu\s*Japan|Fujitsu/i.test(text)) return canonicalCompanyName("富士通株式会社");
   if (/日本電気株式会社|(?:^|[^A-Za-z0-9_])NEC(?:-G)?(?:$|[^A-Za-z0-9_])|医療DX|厚生労働省/.test(text)) {

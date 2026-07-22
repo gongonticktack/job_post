@@ -198,7 +198,7 @@ VALUES (
 (
   '日本アイ・ビー・エム株式会社',
   '{
-    "aliases": ["日本IBM", "日本 IBM", "日本アイビーエム", "IBM Japan", "IBM"],
+    "aliases": ["日本IBM", "日本 IBM", "日本アイビーエム", "IBM Japan", "IBM", "IBM Japan Digital Services", "IJDS", "日本アイ・ビー・エムデジタルサービス"],
     "titlePattern": ".+",
     "titleMatchIndex": 0,
     "fixedAnnualIncomeRaw": "700-1200万円",
@@ -444,6 +444,12 @@ VALUES
   ('skill', 'TypeScript', 2),
   ('skill', 'Python', 3),
   ('skill', 'Java', 4),
+  ('skill', 'Webアプリケーション', 701),
+  ('skill', 'オープン系システム', 702),
+  ('skill', 'Salesforce', 703),
+  ('skill', 'CRM', 704),
+  ('skill', 'JLPT N1', 706),
+  ('skill', '日本語', 707),
   ('skill', 'C#', 5),
   ('skill', 'C++', 6),
   ('skill', 'Go', 7),

@@ -66,7 +66,7 @@ window.JobParserConfig = {
       ]
     },
     "日本アイ・ビー・エム株式会社": {
-      aliases: ["日本IBM", "日本 IBM", "日本アイビーエム", "IBM Japan", "IBM"],
+      aliases: ["日本IBM", "日本 IBM", "日本アイビーエム", "IBM Japan", "IBM", "IBM Japan Digital Services", "IJDS", "日本アイ・ビー・エムデジタルサービス"],
       titlePattern: ".+",
       titleMatchIndex: 0,
       fixedAnnualIncomeRaw: "700-1200万円",
@@ -272,7 +272,7 @@ window.JobParserConfig = {
     }
   },
   skillDictionary: [
-    "JavaScript", "TypeScript", "Python", "Java", "C#", "C++", "Go", "Ruby", "PHP",
+    "JavaScript", "TypeScript", "Python", "Java", "Webアプリケーション", "オープン系システム", "Salesforce", "CRM", "RPA", "JLPT N1", "日本語", "C#", "C++", "Go", "Ruby", "PHP",
     "SQL", "AWS", "Azure", "GCP", "Docker", "Kubernetes", "React", "Vue", "Angular",
     "Spring", "Linux", "Git", "SCM", "ERP", "SAP", "SAP S/4HANA", "Oracle Cloud SCM",
     "Kinaxis", "Kinaxis Maestro", "Anaplan", "O9", "mcframe", "PMP", "ASCM",

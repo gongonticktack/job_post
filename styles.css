@@ -475,13 +475,19 @@ select {
   min-height: 130px;
 }
 
+.company-cloud.word-cloud {
+  min-height: 130px;
+}
+
 .trend-collapse {
-  display: block;
+  display: flex;
+  flex-direction: column;
   flex: 1 0 100%;
   width: 100%;
 }
 
 .trend-collapse summary {
+  order: 1;
   width: fit-content;
   max-width: 100%;
   min-height: 32px;
@@ -501,16 +507,14 @@ select {
   color: var(--accent-strong);
 }
 
-.trend-collapse[open] summary {
-  margin-bottom: 12px;
-}
-
 .trend-collapse-body {
+  order: 0;
   display: flex;
   align-content: flex-start;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
+  margin-bottom: 12px;
 }
 
 .income-filter {
@@ -722,6 +726,11 @@ select {
 .word-certification {
   --word-rgb: 216, 180, 254;
   --word-text-rgb: 243, 232, 255;
+}
+
+.word-company {
+  --word-rgb: 125, 211, 252;
+  --word-text-rgb: 211, 241, 255;
 }
 
 @keyframes cloudIn {
