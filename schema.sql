@@ -128,7 +128,7 @@ INSERT INTO company_parser_configs (company_name, parser_config, enabled)
 VALUES (
   '株式会社NTTデータ',
   '{
-    "aliases": ["NTT DATA", "NTTData", "NTT Data"],
+    "aliases": ["NTT DATA", "NTT DATA GROUP", "NTTデータ株式会社", "NTTデータ", "NTTデータグループ", "株式会社NTTデータグループ", "NTTData", "NTT Data"],
     "titlePattern": "^【.+?】",
     "titleMatchIndex": 1,
     "headings": {

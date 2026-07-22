@@ -4,7 +4,7 @@ window.JobParserConfig = {
   defaultCompany: "株式会社NTTデータ",
   companies: {
     "株式会社NTTデータ": {
-      aliases: ["NTT DATA", "NTTデータ株式会社", "NTTデータ", "NTTData", "NTT Data"],
+      aliases: ["NTT DATA", "NTT DATA GROUP", "NTTデータ株式会社", "NTTデータ", "NTTデータグループ", "株式会社NTTデータグループ", "NTTData", "NTT Data"],
       titlePattern: "^【.+?】",
       titleMatchIndex: 1,
       headings: {

@@ -1123,7 +1123,7 @@ function canonicalCompanyOptionName(name) {
 }
 
 function isHiddenCompanyOption(name) {
-  return /富士通\s*japan|fujitsu\s*japan/i.test(cleanCompanyName(name));
+  return /富士通\s*japan|fujitsu\s*japan|ntt\s*data\s*group|ntt\s*データ\s*グループ/i.test(cleanCompanyName(name));
 }
 
 function renderMetrics(jobs) {
@@ -2533,7 +2533,7 @@ function getCompanyParser(company) {
 }
 
 function detectCompanyFromText(text, fallbackCompany) {
-  if (/株式会社NTTデータ|NTTデータ株式会社|NTT\s*データ|NTT\s*DATA/i.test(text)) return canonicalCompanyName("株式会社NTTデータ");
+  if (/株式会社NTTデータグループ|NTTデータグループ|株式会社NTTデータ|NTTデータ株式会社|NTT\s*データ|NTT\s*DATA(?:\s*GROUP)?/i.test(text)) return canonicalCompanyName("株式会社NTTデータ");
   if (/日本アイ・ビー・エム株式会社|日本IBM|日本アイ・ビー・エムデジタルサービス|IJDS|IBM\s*Japan|IBM\s*Japan\s*Digital\s*Services|(?:^|[^A-Za-z0-9_])IBM(?:$|[^A-Za-z0-9_])/i.test(text)) return canonicalCompanyName("日本アイ・ビー・エム株式会社");
   if (/トヨタ自動車株式会社|トヨタ自動車|TOYOTA\s*MOTOR|Toyota\s*Motor/i.test(text)) return canonicalCompanyName("トヨタ自動車株式会社");
   if (/富士通株式会社|富士通\s*Japan\s*株式会社|Fujitsu\s*Japan|Fujitsu/i.test(text)) return canonicalCompanyName("富士通株式会社");
