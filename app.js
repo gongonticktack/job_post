@@ -72,6 +72,7 @@ const state = {
   supabase: null,
   manualDraft: null,
   activeFacetFilters: [],
+  sortKey: "default",
   incomeFilter: {
     min: INCOME_FILTER_MIN,
     max: INCOME_FILTER_MAX
@@ -98,6 +99,8 @@ const els = {
   certificationChart: document.querySelector("#certificationChart"),
   resetCertificationFilters: document.querySelector("#resetCertificationFilters"),
   searchInput: document.querySelector("#searchInput"),
+  sortMenuButton: document.querySelector("#sortMenuButton"),
+  sortMenu: document.querySelector("#sortMenu"),
   jobList: document.querySelector("#jobList"),
   crawlForm: document.querySelector("#crawlForm"),
   crawlCompanySelect: document.querySelector("#crawlCompanySelect"),
@@ -145,6 +148,9 @@ function bindEvents() {
   els.settingsButton.addEventListener("click", () => switchView("settings"));
   els.skillTypeFilter.addEventListener("change", render);
   els.searchInput.addEventListener("input", render);
+  els.sortMenuButton.addEventListener("click", toggleSortMenu);
+  els.sortMenu.addEventListener("click", handleSortMenuClick);
+  document.addEventListener("click", closeSortMenuOnOutsideClick);
   [els.incomeMinRange, els.incomeMaxRange].forEach((range) => {
     range.addEventListener("input", handleIncomeFilterInput);
   });
@@ -967,11 +973,12 @@ function switchView(viewId) {
 function render() {
   updateCompanyOptions();
   const visibleJobs = filterJobs(state.jobs);
+  const sortedJobs = sortJobs(visibleJobs);
   renderMetrics(visibleJobs);
   renderFilterControls();
   renderSkillChart(visibleJobs);
   renderCertificationChart(visibleJobs);
-  renderJobList(els.jobList, visibleJobs);
+  renderJobList(els.jobList, sortedJobs);
   renderSettingsJobList();
 }
 
@@ -979,10 +986,43 @@ function renderFilterControls() {
   const skillCount = countActiveFilters("skill");
   const certificationCount = countActiveFilters("certification");
   updateIncomeFilterControls();
+  updateSortControls();
   els.resetSkillFilters.hidden = skillCount === 0;
   els.resetCertificationFilters.hidden = certificationCount === 0;
   els.resetSkillFilters.textContent = skillCount ? `スキル条件リセット (${skillCount})` : "スキル条件リセット";
   els.resetCertificationFilters.textContent = certificationCount ? `資格条件リセット (${certificationCount})` : "資格条件リセット";
+}
+
+function toggleSortMenu(event) {
+  event.stopPropagation();
+  const expanded = els.sortMenuButton.getAttribute("aria-expanded") === "true";
+  setSortMenuOpen(!expanded);
+}
+
+function handleSortMenuClick(event) {
+  const button = event.target.closest("[data-sort-value]");
+  if (!button) return;
+  state.sortKey = button.dataset.sortValue || "default";
+  setSortMenuOpen(false);
+  render();
+}
+
+function closeSortMenuOnOutsideClick(event) {
+  if (els.sortMenu.hidden) return;
+  if (event.target.closest(".sort-menu")) return;
+  setSortMenuOpen(false);
+}
+
+function setSortMenuOpen(open) {
+  els.sortMenu.hidden = !open;
+  els.sortMenuButton.setAttribute("aria-expanded", String(open));
+}
+
+function updateSortControls() {
+  els.sortMenuButton.classList.toggle("is-active", state.sortKey !== "default");
+  els.sortMenu.querySelectorAll("[data-sort-value]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.sortValue === state.sortKey);
+  });
 }
 
 function handleIncomeFilterInput(event) {
@@ -1530,6 +1570,54 @@ function getJobIncomeRange(job) {
     min: min ?? max,
     max: max ?? min
   };
+}
+
+function sortJobs(jobs) {
+  if (state.sortKey === "default") return jobs;
+  return [...jobs].sort((a, b) => compareJobsBySortKey(a, b, state.sortKey));
+}
+
+function compareJobsBySortKey(a, b, sortKey) {
+  if (sortKey === "income-desc") {
+    return compareNullableNumbers(getJobAverageIncome(b), getJobAverageIncome(a));
+  }
+  if (sortKey === "income-asc") {
+    return compareNullableNumbers(getJobAverageIncome(a), getJobAverageIncome(b));
+  }
+  if (sortKey === "company-asc") {
+    return compareText(a.company, b.company) || compareText(a.title, b.title);
+  }
+  if (sortKey === "location-asc") {
+    return compareText(a.location, b.location) || compareText(a.company, b.company) || compareText(a.title, b.title);
+  }
+  if (sortKey === "title-asc") {
+    return compareText(a.title, b.title) || compareText(a.company, b.company);
+  }
+  if (sortKey === "date-desc") {
+    return compareNullableNumbers(getJobTimestamp(b), getJobTimestamp(a));
+  }
+  if (sortKey === "date-asc") {
+    return compareNullableNumbers(getJobTimestamp(a), getJobTimestamp(b));
+  }
+  return 0;
+}
+
+function compareNullableNumbers(a, b) {
+  const aValid = Number.isFinite(a);
+  const bValid = Number.isFinite(b);
+  if (!aValid && !bValid) return 0;
+  if (!aValid) return 1;
+  if (!bValid) return -1;
+  return a - b;
+}
+
+function compareText(a, b) {
+  return cleanText(a || "").localeCompare(cleanText(b || ""), "ja");
+}
+
+function getJobTimestamp(job) {
+  const date = new Date(job.updatedAt || job.createdAt || job.crawledAt || "");
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
 }
 
 function filterJobsByFacet(jobs, filter) {

@@ -49,23 +49,6 @@
 
         <div class="dashboard-layout">
           <div class="insight-column">
-            <section class="panel">
-              <div class="panel-head">
-                <h2>必須スキル傾向</h2>
-                <div class="panel-actions">
-                  <button id="resetSkillFilters" class="ghost-button compact-button" type="button" hidden>スキル条件リセット</button>
-                  <select id="skillTypeFilter" aria-label="スキル種別">
-                    <option value="required">必須</option>
-                    <option value="preferred">推奨</option>
-                  </select>
-                </div>
-              </div>
-              <details class="trend-collapse">
-                <summary>一覧を表示</summary>
-                <div id="skillChart" class="skill-chart empty">データがありません</div>
-              </details>
-            </section>
-
             <section class="panel compact-panel">
               <div class="panel-head">
                 <h2>年収フィルタ</h2>
@@ -87,6 +70,23 @@
               </div>
             </section>
 
+            <section class="panel">
+              <div class="panel-head">
+                <h2>必須スキル傾向</h2>
+                <div class="panel-actions">
+                  <button id="resetSkillFilters" class="ghost-button compact-button" type="button" hidden>スキル条件リセット</button>
+                  <select id="skillTypeFilter" aria-label="スキル種別">
+                    <option value="required">必須</option>
+                    <option value="preferred">推奨</option>
+                  </select>
+                </div>
+              </div>
+              <details class="trend-collapse">
+                <summary>一覧を表示</summary>
+                <div id="skillChart" class="skill-chart empty">データがありません</div>
+              </details>
+            </section>
+
             <section class="panel compact-panel">
               <div class="panel-head">
                 <h2>資格傾向</h2>
@@ -102,8 +102,23 @@
           <section class="panel">
             <div class="panel-head">
               <h2>求人一覧</h2>
-              <div class="search-box">
-                <input id="searchInput" type="search" placeholder="企業名・業務内容・スキルで検索">
+              <div class="job-list-tools">
+                <div class="sort-menu">
+                  <button id="sortMenuButton" class="icon-button" type="button" aria-label="ソート条件" aria-expanded="false">⇅</button>
+                  <div id="sortMenu" class="sort-options" hidden>
+                    <button type="button" data-sort-value="default">初期順</button>
+                    <button type="button" data-sort-value="income-desc">年収が高い順</button>
+                    <button type="button" data-sort-value="income-asc">年収が低い順</button>
+                    <button type="button" data-sort-value="company-asc">企業名順</button>
+                    <button type="button" data-sort-value="location-asc">勤務地順</button>
+                    <button type="button" data-sort-value="title-asc">職種名順</button>
+                    <button type="button" data-sort-value="date-desc">登録日が新しい順</button>
+                    <button type="button" data-sort-value="date-asc">登録日が古い順</button>
+                  </div>
+                </div>
+                <div class="search-box">
+                  <input id="searchInput" type="search" placeholder="企業名・業務内容・スキルで検索">
+                </div>
               </div>
             </div>
             <div id="jobList" class="job-list empty">まだ求人情報が保存されていません</div>
