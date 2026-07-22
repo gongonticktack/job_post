@@ -44,13 +44,36 @@
   async function fetchText(url) {
     try {
       const response = await fetchWithProxyFallback(url, { credentials: "omit" });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const detail = await readErrorResponseText(response);
+        throw new Error(formatFetchError(`FETCH_HTTP_${response.status}`, {
+          url,
+          status: response.status,
+          statusText: response.statusText,
+          detail
+        }));
+      }
       return response.text();
     } catch (error) {
-      throw new Error(
-        `ブラウザから求人ページを取得できませんでした。APIなし構成では取得先サイトがCORSを許可している必要があります。詳細: ${error.message}`
-      );
+      if (/^FETCH_/.test(error.message)) throw error;
+      throw new Error(formatFetchError("FETCH_NETWORK_ERROR", {
+        url,
+        name: error.name || "Error",
+        detail: error.message || String(error)
+      }));
     }
+  }
+
+  async function readErrorResponseText(response) {
+    try {
+      return (await response.text()).slice(0, 800);
+    } catch (error) {
+      return `Unable to read response body: ${error.message}`;
+    }
+  }
+
+  function formatFetchError(code, detail) {
+    return `${code}: ${JSON.stringify(detail)}`;
   }
 
   function extractJobLinks(html, baseUrl) {
