@@ -395,6 +395,35 @@ select {
   min-height: 130px;
 }
 
+.trend-collapse {
+  display: grid;
+  gap: 12px;
+}
+
+.trend-collapse summary {
+  width: fit-content;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.62);
+  color: #d8e4ef;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.trend-collapse summary:hover {
+  border-color: rgba(37, 214, 162, 0.38);
+  color: var(--accent-strong);
+}
+
+.trend-collapse[open] summary {
+  margin-bottom: 12px;
+}
+
 .income-filter {
   display: grid;
   gap: 10px;
@@ -750,8 +779,7 @@ select {
   gap: 8px;
 }
 
-.skill-block dt,
-.skill-label {
+.skill-block dt {
   color: var(--accent-strong);
   font-weight: 800;
 }
@@ -761,39 +789,6 @@ select {
   color: #dbe7f2;
   word-break: break-word;
   overflow-wrap: anywhere;
-}
-
-.skill-block .collapsible-skill {
-  display: block;
-}
-
-.collapsible-skill details {
-  display: grid;
-  gap: 7px;
-}
-
-.collapsible-skill summary {
-  width: fit-content;
-  max-width: 100%;
-  min-height: 30px;
-  padding: 5px 9px;
-  border: 1px solid rgba(37, 214, 162, 0.22);
-  border-radius: 7px;
-  background: rgba(37, 214, 162, 0.08);
-  color: var(--accent-strong);
-  font-size: 12px;
-  font-weight: 900;
-  cursor: pointer;
-  list-style-position: inside;
-}
-
-.collapsible-skill summary:hover {
-  border-color: rgba(37, 214, 162, 0.46);
-  background: rgba(37, 214, 162, 0.12);
-}
-
-.collapsible-skill dd {
-  padding: 2px 0 2px 4px;
 }
 
 .job-detail-block {

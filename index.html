@@ -60,7 +60,10 @@
                   </select>
                 </div>
               </div>
-              <div id="skillChart" class="skill-chart empty">データがありません</div>
+              <details class="trend-collapse">
+                <summary>一覧を表示</summary>
+                <div id="skillChart" class="skill-chart empty">データがありません</div>
+              </details>
             </section>
 
             <section class="panel compact-panel">
@@ -89,7 +92,10 @@
                 <h2>資格傾向</h2>
                 <button id="resetCertificationFilters" class="ghost-button compact-button" type="button" hidden>資格条件リセット</button>
               </div>
-              <div id="certificationChart" class="skill-chart certification-cloud empty">データがありません</div>
+              <details class="trend-collapse">
+                <summary>一覧を表示</summary>
+                <div id="certificationChart" class="skill-chart certification-cloud empty">データがありません</div>
+              </details>
             </section>
           </div>
 
@@ -246,24 +252,20 @@
         </div>
         <div class="match-summary" hidden></div>
         <div class="job-meta"></div>
-        <div class="skill-block">
-          <div class="collapsible-skill">
-            <details>
-              <summary>必須</summary>
-              <dd class="required"></dd>
-            </details>
+        <dl class="skill-block">
+          <div>
+            <dt>必須</dt>
+            <dd class="required"></dd>
           </div>
           <div>
-            <span class="skill-label">推奨</span>
+            <dt>推奨</dt>
             <dd class="preferred"></dd>
           </div>
-          <div class="collapsible-skill">
-            <details>
-              <summary>資格</summary>
-              <dd class="certifications"></dd>
-            </details>
+          <div>
+            <dt>資格</dt>
+            <dd class="certifications"></dd>
           </div>
-        </div>
+        </dl>
         <details class="job-detail-block">
           <summary>職務内容・補足</summary>
           <section>
