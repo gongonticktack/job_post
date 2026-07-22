@@ -154,6 +154,15 @@
   function parseJobDetail(html, sourceUrl, company) {
     const doc = new DOMParser().parseFromString(html, "text/html");
     const bodyText = doc.body?.innerText || doc.body?.textContent || "";
+    if (isAccentureCareersUrl(sourceUrl) || /アクセンチュア株式会社|アクセンチュア/.test(bodyText)) {
+      return parseAccentureJobDetail(bodyText, sourceUrl, company);
+    }
+    if (isIbmCareersUrl(sourceUrl) || /日本IBM|日本アイ・ビー・エム|Required Technical and Professional Expertise|Your Role and Responsibilities/.test(bodyText)) {
+      return parseIbmJobDetail(bodyText, sourceUrl, company);
+    }
+    if (isToyotaCareerUrl(sourceUrl) || /トヨタ自動車株式会社|＜MUST＞|待遇等/.test(bodyText)) {
+      return parseToyotaJobDetail(bodyText, sourceUrl, company);
+    }
     if (isFujitsuJobsUrl(sourceUrl) || /求人ID[:：]/.test(bodyText)) {
       return parseFujitsuJobDetail(bodyText, sourceUrl, company);
     }
@@ -181,6 +190,147 @@
       sourceUrl,
       crawledAt: new Date().toISOString()
     };
+  }
+
+  function parseIbmJobDetail(bodyText, sourceUrl, fallbackCompany) {
+    const text = normalizeLines(bodyText);
+    if (/verify that you're not a robot|JavaScript is disabled|Enable JavaScript/i.test(text)) {
+      return {
+        company: "日本アイ・ビー・エム株式会社",
+        title: "",
+        description: "",
+        annualIncomeRaw: "700-1200万円",
+        annualIncomeMin: 700,
+        annualIncomeMax: 1200,
+        requiredSkills: [],
+        preferredSkills: [],
+        notes: "IBM Careers page requires JavaScript verification; paste the job text manually to parse details.",
+        location: "",
+        sourceUrl,
+        crawledAt: new Date().toISOString()
+      };
+    }
+    const title = firstNonEmpty([
+      lineAfter(text, "###"),
+      sectionBetweenLines(text, ["Job Details", "求人詳細"], ["Introduction", "Your Role and Responsibilities", "職務内容"]),
+      sourceUrl
+    ]);
+    const description = firstNonEmpty([
+      sectionAfterLabel(text, ["Your Role and Responsibilities", "Your role and responsibilities"], [
+        "Required Technical and Professional Expertise", "Preferred Technical and Professional Expertise", "About Business Unit", "Being You @ IBM"
+      ]),
+      sectionAfterLabel(text, ["職務内容", "業務内容", "ポジション概要"], ["必要なスキル・経験", "必須スキル", "歓迎するスキル・経験", "勤務地"])
+    ]);
+    const requiredRaw = firstNonEmpty([
+      sectionAfterLabel(text, ["Required Technical and Professional Expertise", "Required expertise"], [
+        "Preferred Technical and Professional Expertise", "Preferred expertise", "About Business Unit", "Being You @ IBM", "About IBM"
+      ]),
+      sectionAfterLabel(text, ["必要なスキル・経験", "必須スキル"], ["歓迎するスキル・経験", "歓迎スキル", "勤務地", "IBMについて"])
+    ]);
+    const preferredRaw = firstNonEmpty([
+      sectionAfterLabel(text, ["Preferred Technical and Professional Expertise", "Preferred expertise"], [
+        "About Business Unit", "Being You @ IBM", "About IBM", "Location", "Locations"
+      ]),
+      sectionAfterLabel(text, ["歓迎するスキル・経験", "歓迎スキル"], ["勤務地", "IBMについて"])
+    ]);
+    const location = firstNonEmpty([
+      sectionAfterLabel(text, ["Locations", "Location"], ["Role", "Category", "Employment Type", "Position Type"]),
+      sectionAfterLabel(text, ["勤務地"], ["職務内容", "業務内容", "応募資格"])
+    ]);
+
+    return {
+      company: "日本アイ・ビー・エム株式会社",
+      title: cleanText(title),
+      description: cleanText(description || text.slice(0, 360)),
+      annualIncomeRaw: "700-1200万円",
+      annualIncomeMin: 700,
+      annualIncomeMax: 1200,
+      requiredSkills: extractSkills(requiredRaw || description),
+      preferredSkills: extractSkills(preferredRaw),
+      notes: fallbackCompany && fallbackCompany !== "日本アイ・ビー・エム株式会社" ? `入力企業名: ${fallbackCompany}` : "",
+      location,
+      sourceUrl,
+      crawledAt: new Date().toISOString()
+    };
+  }
+
+  function parseAccentureJobDetail(bodyText, sourceUrl, fallbackCompany) {
+    const text = normalizeLines(bodyText);
+    const title = firstNonEmpty([
+      lineAfter(text, "#"),
+      sectionBetweenLines(text, ["ジョブ番号"], ["ポジションを保存する", "応募する", "業務内容"]),
+      decodeURIComponent(new URL(sourceUrl).searchParams.get("title") || "")
+    ]);
+    const description = sectionAfterLabel(text, ["業務内容"], ["募集要項", "勤務地", "追加情報"]);
+    const requirements = sectionAfterLabel(text, ["募集要項"], ["勤務地", "追加情報", "雇用機会の均等化に関する声明"]);
+    const requiredRaw = firstNonEmpty([
+      sectionAfterLabel(requirements, ["◆応募要件", "応募要件"], ["◆望ましい経験・スキル", "望ましい経験・スキル"]),
+      sectionAfterLabel(text, ["【必須条件】"], ["【歓迎要件】", "勤務地", "追加情報"])
+    ]);
+    const preferredRaw = firstNonEmpty([
+      sectionAfterLabel(requirements, ["◆望ましい経験・スキル", "望ましい経験・スキル"], []),
+      sectionAfterLabel(text, ["【歓迎要件】"], ["勤務地", "追加情報"])
+    ]);
+    const location = sectionAfterLabel(text, ["勤務地"], ["追加情報", "雇用機会の均等化に関する声明"]);
+
+    return {
+      company: "アクセンチュア株式会社",
+      title: cleanText(title),
+      description: cleanText(description || text.slice(0, 360)),
+      annualIncomeRaw: "700-1200万円",
+      annualIncomeMin: 700,
+      annualIncomeMax: 1200,
+      requiredSkills: extractSkills(requiredRaw || requirements || description),
+      preferredSkills: extractSkills(preferredRaw),
+      notes: fallbackCompany && fallbackCompany !== "アクセンチュア株式会社" ? `入力企業名: ${fallbackCompany}` : "",
+      location,
+      sourceUrl,
+      crawledAt: new Date().toISOString()
+    };
+  }
+
+  function parseToyotaJobDetail(bodyText, sourceUrl, fallbackCompany) {
+    const text = normalizeLines(bodyText);
+    const title = firstNonEmpty([
+      lineAfter(text, "###"),
+      sectionBetweenLines(text, ["［一覧に戻る］"], ["職種", "勤務地"]),
+      sourceUrl
+    ]);
+    const location = extractToyotaLocation(text) || sectionAfterLabel(text, ["勤務地"], ["特色", "勤務形態", "業務内容"]);
+    const description = sectionAfterLabel(text, ["業務内容"], ["応募資格", "待遇等"]);
+    const qualification = sectionAfterLabel(text, ["応募資格"], ["待遇等", "職場イメージ・職場ミッション"]);
+    const requiredRaw = sectionAfterLabel(qualification, ["＜MUST＞", "MUST"], ["＜WANT＞", "WANT"]);
+    const preferredRaw = sectionAfterLabel(qualification, ["＜WANT＞", "WANT"], []);
+    const incomeRaw = sectionAfterLabel(text, ["待遇等"], ["職場イメージ・職場ミッション", "やりがい・PR", "在宅勤務"]);
+    const income = parseIncome(incomeRaw);
+    const notes = [
+      sectionAfterLabel(text, ["特色"], ["勤務形態", "業務内容"]),
+      sectionAfterLabel(text, ["在宅勤務"], ["採用の背景", "応募"])
+    ].filter(Boolean).join(" / ");
+
+    return {
+      company: "トヨタ自動車株式会社",
+      title: cleanText(title),
+      description: cleanText(description || text.slice(0, 360)),
+      annualIncomeRaw: incomeRaw,
+      annualIncomeMin: income.min,
+      annualIncomeMax: income.max,
+      requiredSkills: extractSkills(requiredRaw || qualification || description),
+      preferredSkills: extractSkills(preferredRaw),
+      notes,
+      location,
+      sourceUrl,
+      crawledAt: new Date().toISOString()
+    };
+  }
+
+  function extractToyotaLocation(text) {
+    const block = sectionAfterLabel(text, ["勤務地"], ["特色", "勤務形態", "業務内容"]);
+    const locations = block
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /都|道|府|県/.test(line));
+    return locations.join(" / ");
   }
 
   function parseFujitsuJobDetail(bodyText, sourceUrl, fallbackCompany) {
@@ -270,7 +420,11 @@
   }
 
   function parseIncome(raw) {
-    const values = (raw.match(/\d{3,4}/g) || []).map(Number);
+    const yenValues = (raw.match(/\d[\d,]{4,}/g) || [])
+      .map((value) => Number(value.replace(/,/g, "")))
+      .filter((value) => value >= 10000)
+      .map((value) => Math.round(value / 10000));
+    const values = yenValues.length ? yenValues : (raw.match(/\d{3,4}/g) || []).map(Number);
     return {
       min: values.length ? Math.min(...values) : null,
       max: values.length ? Math.max(...values) : null
@@ -279,7 +433,8 @@
 
   function extractSkills(raw) {
     if (!raw) return [];
-    const found = knownSkills.filter((skill) => new RegExp(escapeRegExp(skill), "i").test(raw));
+    const dictionary = [...new Set([...knownSkills, ...(window.JobParserConfig?.skillDictionary || [])])];
+    const found = dictionary.filter((skill) => new RegExp(escapeRegExp(skill), "i").test(raw));
     const bulletItems = raw
       .split(/\n|・|●|■|,|、|;/)
       .map((item) => cleanText(item).replace(/^[\-\u30fb\s]+/, ""))
@@ -316,6 +471,31 @@
   function isFujitsuJobDetailUrl(url) {
     try {
       return /^\/job\//.test(new URL(url).pathname);
+    } catch {
+      return false;
+    }
+  }
+
+  function isToyotaCareerUrl(url) {
+    try {
+      return new URL(url).hostname === "toyota-career.snar.jp";
+    } catch {
+      return false;
+    }
+  }
+
+  function isIbmCareersUrl(url) {
+    try {
+      return new URL(url).hostname === "careers.ibm.com";
+    } catch {
+      return false;
+    }
+  }
+
+  function isAccentureCareersUrl(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.hostname === "www.accenture.com" && parsed.pathname.includes("/careers/jobdetails");
     } catch {
       return false;
     }

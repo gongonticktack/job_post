@@ -196,6 +196,104 @@ VALUES (
   TRUE
 ),
 (
+  '日本アイ・ビー・エム株式会社',
+  '{
+    "aliases": ["日本IBM", "日本 IBM", "日本アイビーエム", "IBM Japan", "IBM"],
+    "titlePattern": ".+",
+    "titleMatchIndex": 0,
+    "fixedAnnualIncomeRaw": "700-1200万円",
+    "headings": {
+      "company": [],
+      "description": [
+        "職務内容",
+        "業務内容",
+        "ポジション概要",
+        "Your role and responsibilities",
+        "Your Role and Responsibilities",
+        "Introduction"
+      ],
+      "appealPoints": ["このポジションの魅力", "IBMについて", "About IBM", "Being You @ IBM"],
+      "referenceInfo": ["事業部について", "About Business Unit", "Wonder if IBM is the one for you?"],
+      "requiredSkills": [
+        "必要なスキル・経験",
+        "必須スキル",
+        "Required Technical and Professional Expertise",
+        "Required expertise"
+      ],
+      "requiredLanguage": [],
+      "requiredCertifications": [
+        "必要なスキル・経験",
+        "Required Technical and Professional Expertise",
+        "Required expertise"
+      ],
+      "preferredSkills": [
+        "歓迎するスキル・経験",
+        "歓迎スキル",
+        "Preferred Technical and Professional Expertise",
+        "Preferred expertise"
+      ],
+      "preferredLanguage": [],
+      "preferredCertifications": [
+        "歓迎するスキル・経験",
+        "Preferred Technical and Professional Expertise",
+        "Preferred expertise"
+      ],
+      "income": [],
+      "location": ["勤務地", "Location", "Locations"]
+    },
+    "sectionHeadings": [
+      "職務内容", "業務内容", "ポジション概要", "応募資格", "必要なスキル・経験", "必須スキル",
+      "歓迎するスキル・経験", "歓迎スキル", "勤務地", "Introduction",
+      "Your role and responsibilities", "Your Role and Responsibilities",
+      "Required Technical and Professional Expertise", "Required expertise",
+      "Preferred Technical and Professional Expertise", "Preferred expertise",
+      "About IBM", "Being You @ IBM", "About Business Unit", "Wonder if IBM is the one for you?"
+    ],
+    "ignoreSkillPatterns": [
+      "必須", "歓迎", "経験", "資格", "応募資格", "職務内容", "業務内容", "勤務地", "ポジション",
+      "IBM", "お客様", "プロジェクト", "チーム", "コミュニケーション", "ビジネス", "以上", "以下"
+    ]
+  }'::jsonb,
+  TRUE
+),
+(
+  'トヨタ自動車株式会社',
+  '{
+    "aliases": ["トヨタ自動車", "TOYOTA MOTOR CORPORATION", "Toyota Motor Corporation", "Toyota"],
+    "titlePattern": ".+",
+    "titleMatchIndex": 0,
+    "headings": {
+      "company": [],
+      "description": ["業務内容"],
+      "appealPoints": ["やりがい・PR", "特色"],
+      "referenceInfo": ["職場イメージ・職場ミッション", "在宅勤務", "採用の背景"],
+      "requiredSkills": ["応募資格"],
+      "requiredLanguage": [],
+      "requiredCertifications": ["応募資格"],
+      "preferredSkills": ["＜WANT＞", "WANT"],
+      "preferredLanguage": [],
+      "preferredCertifications": ["＜WANT＞", "WANT"],
+      "income": ["待遇等"],
+      "location": ["勤務地"]
+    },
+    "qualificationMarkers": {
+      "must": ["＜MUST＞", "MUST"],
+      "want": ["＜WANT＞", "WANT"],
+      "stop": ["待遇等", "職場イメージ・職場ミッション", "やりがい・PR", "在宅勤務", "採用の背景"]
+    },
+    "sectionHeadings": [
+      "職種", "勤務地", "特色", "勤務形態", "業務内容", "応募資格", "待遇等",
+      "職場イメージ・職場ミッション", "やりがい・PR", "在宅勤務", "採用の背景",
+      "＜MUST＞", "＜WANT＞", "MUST", "WANT"
+    ],
+    "ignoreSkillPatterns": [
+      "必須", "歓迎", "経験", "資格", "応募資格", "下記", "関する", "有している方", "いずれか",
+      "勤務地", "待遇", "想定年収", "勤務形態", "正社員", "役割", "メンバー", "チームリーダー", "マネージャー"
+    ]
+  }'::jsonb,
+  TRUE
+),
+(
   '株式会社トヨタシステムズ',
   '{
     "aliases": ["トヨタシステムズ", "株式会社 トヨタシステムズ"],
@@ -266,22 +364,23 @@ VALUES (
     "aliases": ["アクセンチュア", "Accenture", "Accenture Japan"],
     "titlePattern": ".+",
     "titleMatchIndex": 0,
+    "fixedAnnualIncomeRaw": "700-1200万円",
     "headings": {
       "company": [],
       "description": ["業務内容"],
       "appealPoints": ["■プロジェクト事例"],
       "referenceInfo": ["追加情報"],
-      "requiredSkills": ["【必須条件】"],
+      "requiredSkills": ["【必須条件】", "◆応募要件", "応募要件"],
       "requiredLanguage": [],
-      "requiredCertifications": ["【必須条件】"],
-      "preferredSkills": ["【歓迎要件】"],
+      "requiredCertifications": ["【必須条件】", "◆応募要件", "応募要件"],
+      "preferredSkills": ["【歓迎要件】", "◆望ましい経験・スキル", "望ましい経験・スキル"],
       "preferredLanguage": [],
-      "preferredCertifications": ["【歓迎要件】"],
+      "preferredCertifications": ["【歓迎要件】", "◆望ましい経験・スキル", "望ましい経験・スキル"],
       "income": [],
       "location": ["【勤務地】", "勤務地"]
     },
     "sectionHeadings": [
-      "業務内容", "募集要項", "【必須条件】", "【歓迎要件】", "【勤務地】",
+      "業務内容", "募集要項", "◆応募要件", "応募要件", "◆望ましい経験・スキル", "望ましい経験・スキル", "【必須条件】", "【歓迎要件】", "【勤務地】",
       "■プロジェクト事例", "※このような志をお持ちの方を特に歓迎しております※",
       "勤務地", "追加情報", "雇用機会の均等化に関する声明", "会社情報"
     ],

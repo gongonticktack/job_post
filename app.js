@@ -2268,13 +2268,23 @@ function parseManualJobText(text, fallbackCompany) {
     requiredCertifications = necQualifications.must || requiredCertifications;
     preferredCertifications = necQualifications.want || preferredCertifications;
   }
+  if (parser.qualificationMarkers) {
+    const qualifications = extractMarkedQualificationBlocks(normalized, parser.qualificationMarkers);
+    requiredSkillsRaw = qualifications.must || requiredSkillsRaw;
+    preferredSkillsRaw = qualifications.want || preferredSkillsRaw;
+    requiredCertifications = qualifications.must || requiredCertifications;
+    preferredCertifications = qualifications.want || preferredCertifications;
+  }
   const annualIncomeSource = parser.fixedAnnualIncomeRaw
     || pickSection(normalized, headings.income, parser)
     || findIncomeText(normalized)
     || "";
   const income = parseIncome(annualIncomeSource);
   const annualIncomeRaw = formatIncomeRaw(annualIncomeSource, income);
-  const location = pickSection(normalized, headings.location, parser);
+  let location = pickSection(normalized, headings.location, parser);
+  if (company === "トヨタ自動車株式会社") {
+    location = extractLocationLines(location) || location;
+  }
   const notes = referenceInfo || "";
 
   return {
@@ -2334,6 +2344,40 @@ function extractNecQualificationBlocks(text) {
     must: cleanText(blocks.must.join("\n")),
     want: cleanText(blocks.want.join("\n"))
   };
+}
+
+function extractMarkedQualificationBlocks(text, markers = {}) {
+  const blocks = { must: [], want: [] };
+  const mustMarkers = markers.must || ["MUST"];
+  const wantMarkers = markers.want || ["WANT"];
+  const stopMarkers = markers.stop || [];
+  let current = "";
+
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (current && stopMarkers.some((marker) => isLabelLine(line, marker))) break;
+    if (mustMarkers.some((marker) => line === marker || line.includes(marker))) {
+      current = "must";
+      continue;
+    }
+    if (wantMarkers.some((marker) => line === marker || line.includes(marker))) {
+      current = "want";
+      continue;
+    }
+    if (!current) continue;
+    blocks[current].push(line);
+  }
+
+  return {
+    must: cleanText(blocks.must.join("\n")),
+    want: cleanText(blocks.want.join("\n"))
+  };
+}
+
+function extractLocationLines(raw) {
+  const matches = String(raw || "").match(/[^\s/、,]*(?:都|道|府|県)(?:（[^）]+）|\([^)]+\)|[^\s/、,]*)?/g) || [];
+  return [...new Set(matches.map(cleanText).filter(Boolean))].join(" / ");
 }
 
 function renderManualEditor(job) {
@@ -2448,6 +2492,8 @@ function getCompanyParser(company) {
 
 function detectCompanyFromText(text, fallbackCompany) {
   if (/株式会社NTTデータ|NTTデータ株式会社|NTT\s*データ|NTT\s*DATA/i.test(text)) return canonicalCompanyName("株式会社NTTデータ");
+  if (/日本アイ・ビー・エム株式会社|日本IBM|IBM\s*Japan|(?:^|[^A-Za-z0-9_])IBM(?:$|[^A-Za-z0-9_])/i.test(text)) return canonicalCompanyName("日本アイ・ビー・エム株式会社");
+  if (/トヨタ自動車株式会社|トヨタ自動車|TOYOTA\s*MOTOR|Toyota\s*Motor/i.test(text)) return canonicalCompanyName("トヨタ自動車株式会社");
   if (/富士通株式会社|富士通\s*Japan\s*株式会社|Fujitsu\s*Japan|Fujitsu/i.test(text)) return canonicalCompanyName("富士通株式会社");
   if (/日本電気株式会社|(?:^|[^A-Za-z0-9_])NEC(?:-G)?(?:$|[^A-Za-z0-9_])|医療DX|厚生労働省/.test(text)) {
     return canonicalCompanyName("NEC");

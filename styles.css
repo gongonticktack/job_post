@@ -1334,16 +1334,12 @@ label {
 
   .skill-chart.word-cloud {
     align-items: flex-start;
-    max-height: 240px;
     min-height: 128px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
     gap: 6px;
     padding: 4px 2px 6px;
   }
 
   .certification-cloud.word-cloud {
-    max-height: 190px;
     min-height: 96px;
   }
 
