@@ -7,6 +7,8 @@ const DICTIONARY_STORAGE_KEY = "job-post-dictionaries";
 const INCOME_FILTER_MIN = 0;
 const INCOME_FILTER_MAX = 3000;
 const INCOME_FILTER_STEP = 50;
+const SKILL_TREND_VISIBLE_LIMIT = 10;
+const CERTIFICATION_TREND_VISIBLE_LIMIT = 8;
 const CERTIFICATION_ALIASES = {
   "project management professional": "PMP",
   "project manager professional": "PMP",
@@ -1144,7 +1146,7 @@ function renderRepresentativeCompanies(companyCounts) {
     els.representativeCompanies.textContent = "-";
     return;
   }
-  companyCounts.slice(0, 5).forEach(({ name, count }) => {
+  companyCounts.slice(0, 4).forEach(({ name, count }) => {
     const item = document.createElement("span");
     item.textContent = `${name} ${count}`;
     els.representativeCompanies.appendChild(item);
@@ -1189,7 +1191,25 @@ function renderCertificationChart(jobs) {
 function renderWordCloud(container, counts, type = "skill", key = "") {
   const max = counts[0].count;
   const visibleCounts = prioritizeSelectedCounts(counts, type, key);
-  visibleCounts.forEach(({ name, count }, index) => {
+  const limit = type === "certification" ? CERTIFICATION_TREND_VISIBLE_LIMIT : SKILL_TREND_VISIBLE_LIMIT;
+  const primaryCounts = visibleCounts.slice(0, limit);
+  const collapsedCounts = visibleCounts.slice(limit);
+  renderWordCloudItems(container, primaryCounts, max, type, key, 0);
+  if (!collapsedCounts.length) return;
+
+  const details = document.createElement("details");
+  details.className = "trend-collapse";
+  const summary = document.createElement("summary");
+  summary.textContent = `さらに表示 (${collapsedCounts.length})`;
+  const body = document.createElement("div");
+  body.className = "trend-collapse-body";
+  details.append(summary, body);
+  container.appendChild(details);
+  renderWordCloudItems(body, collapsedCounts, max, type, key, primaryCounts.length);
+}
+
+function renderWordCloudItems(container, counts, max, type, key, startIndex = 0) {
+  counts.forEach(({ name, count }, index) => {
     const selected = isCurrentFacetFilter(name, type, key);
     const weight = count <= 1 || max <= 1 ? 0 : (count - 1) / (max - 1);
     const meta = getDictionaryMeta(name, type);
@@ -1201,7 +1221,7 @@ function renderWordCloud(container, counts, type = "skill", key = "") {
     const size = type === "certification" ? "13px" : selected ? "17px" : `${12 + weight * 30}px`;
     item.style.setProperty("--size", size);
     item.style.setProperty("--alpha", `${0.46 + weight * 0.54}`);
-    item.style.setProperty("--delay", `${index * 16}ms`);
+    item.style.setProperty("--delay", `${(startIndex + index) * 16}ms`);
     item.title = `${name}: ${count}件`;
     item.textContent = name;
     item.classList.toggle("is-filtering", selected);
