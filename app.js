@@ -1253,7 +1253,7 @@ function renderWordCloudItems(container, counts, max, type, key, startIndex = 0)
     item.type = "button";
     const rgb = colorToRgb(meta.color);
     if (rgb) item.style.setProperty("--word-rgb", rgb);
-    const size = type === "certification" ? "13px" : `${12 + weight * 30}px`;
+    const size = type === "certification" || type === "company" ? "13px" : `${12 + weight * 30}px`;
     item.style.setProperty("--size", size);
     item.style.setProperty("--alpha", `${0.46 + weight * 0.54}`);
     item.style.setProperty("--delay", `${(startIndex + index) * 16}ms`);
