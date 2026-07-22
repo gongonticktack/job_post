@@ -4,6 +4,9 @@ const DB_NAME = "job-post-analytics";
 const DB_VERSION = 1;
 const STORE = "jobs";
 const DICTIONARY_STORAGE_KEY = "job-post-dictionaries";
+const INCOME_FILTER_MIN = 0;
+const INCOME_FILTER_MAX = 3000;
+const INCOME_FILTER_STEP = 50;
 const CERTIFICATION_ALIASES = {
   "project management professional": "PMP",
   "project manager professional": "PMP",
@@ -68,7 +71,11 @@ const state = {
   db: null,
   supabase: null,
   manualDraft: null,
-  activeFacetFilters: []
+  activeFacetFilters: [],
+  incomeFilter: {
+    min: INCOME_FILTER_MIN,
+    max: INCOME_FILTER_MAX
+  }
 };
 
 const els = {
@@ -82,6 +89,12 @@ const els = {
   skillTypeFilter: document.querySelector("#skillTypeFilter"),
   resetSkillFilters: document.querySelector("#resetSkillFilters"),
   skillChart: document.querySelector("#skillChart"),
+  incomeMinRange: document.querySelector("#incomeMinRange"),
+  incomeMaxRange: document.querySelector("#incomeMaxRange"),
+  incomeFilterValue: document.querySelector("#incomeFilterValue"),
+  incomeFilterMinLabel: document.querySelector("#incomeFilterMinLabel"),
+  incomeFilterMaxLabel: document.querySelector("#incomeFilterMaxLabel"),
+  resetIncomeFilter: document.querySelector("#resetIncomeFilter"),
   certificationChart: document.querySelector("#certificationChart"),
   resetCertificationFilters: document.querySelector("#resetCertificationFilters"),
   searchInput: document.querySelector("#searchInput"),
@@ -132,6 +145,14 @@ function bindEvents() {
   els.settingsButton.addEventListener("click", () => switchView("settings"));
   els.skillTypeFilter.addEventListener("change", render);
   els.searchInput.addEventListener("input", render);
+  [els.incomeMinRange, els.incomeMaxRange].forEach((range) => {
+    range.addEventListener("input", handleIncomeFilterInput);
+  });
+  els.resetIncomeFilter.addEventListener("click", () => {
+    state.incomeFilter.min = INCOME_FILTER_MIN;
+    state.incomeFilter.max = INCOME_FILTER_MAX;
+    render();
+  });
   els.resetSkillFilters.addEventListener("click", () => {
     clearFacetFilters("skill");
     render();
@@ -957,10 +978,62 @@ function render() {
 function renderFilterControls() {
   const skillCount = countActiveFilters("skill");
   const certificationCount = countActiveFilters("certification");
+  updateIncomeFilterControls();
   els.resetSkillFilters.hidden = skillCount === 0;
   els.resetCertificationFilters.hidden = certificationCount === 0;
   els.resetSkillFilters.textContent = skillCount ? `スキル条件リセット (${skillCount})` : "スキル条件リセット";
   els.resetCertificationFilters.textContent = certificationCount ? `資格条件リセット (${certificationCount})` : "資格条件リセット";
+}
+
+function handleIncomeFilterInput(event) {
+  const min = readIncomeFilterValue(els.incomeMinRange, INCOME_FILTER_MIN);
+  const max = readIncomeFilterValue(els.incomeMaxRange, INCOME_FILTER_MAX);
+  if (event.target === els.incomeMinRange && min > max) {
+    state.incomeFilter.min = max;
+    state.incomeFilter.max = max;
+  } else if (event.target === els.incomeMaxRange && max < min) {
+    state.incomeFilter.min = min;
+    state.incomeFilter.max = min;
+  } else {
+    state.incomeFilter.min = min;
+    state.incomeFilter.max = max;
+  }
+  render();
+}
+
+function readIncomeFilterValue(input, fallback) {
+  const value = Number(input?.value);
+  return Number.isFinite(value) ? Math.round(value / INCOME_FILTER_STEP) * INCOME_FILTER_STEP : fallback;
+}
+
+function updateIncomeFilterControls() {
+  const min = clampIncomeFilterValue(state.incomeFilter.min, INCOME_FILTER_MIN, state.incomeFilter.max);
+  const max = clampIncomeFilterValue(state.incomeFilter.max, min, INCOME_FILTER_MAX);
+  state.incomeFilter.min = min;
+  state.incomeFilter.max = max;
+  els.incomeMinRange.value = String(min);
+  els.incomeMaxRange.value = String(max);
+  els.incomeMinRange.parentElement?.style.setProperty("--income-min-pos", `${(min / INCOME_FILTER_MAX) * 100}%`);
+  els.incomeMinRange.parentElement?.style.setProperty("--income-max-pos", `${(max / INCOME_FILTER_MAX) * 100}%`);
+  els.incomeFilterMinLabel.textContent = formatIncomeFilterAmount(INCOME_FILTER_MIN);
+  els.incomeFilterMaxLabel.textContent = formatIncomeFilterAmount(INCOME_FILTER_MAX);
+  els.incomeFilterValue.textContent = isIncomeFilterActive()
+    ? `${formatIncomeFilterAmount(min)} - ${formatIncomeFilterAmount(max)}`
+    : "指定なし";
+  els.resetIncomeFilter.hidden = !isIncomeFilterActive();
+}
+
+function clampIncomeFilterValue(value, min, max) {
+  const numeric = Number.isFinite(value) ? value : min;
+  return Math.min(max, Math.max(min, numeric));
+}
+
+function formatIncomeFilterAmount(value) {
+  return `${value}万円`;
+}
+
+function isIncomeFilterActive() {
+  return state.incomeFilter.min > INCOME_FILTER_MIN || state.incomeFilter.max < INCOME_FILTER_MAX;
 }
 
 function updateCompanyOptions() {
@@ -1422,9 +1495,10 @@ function renderJobMeta(container, job) {
 
 function filterJobs(jobs) {
   const facetFiltered = state.activeFacetFilters.reduce(filterJobsByFacet, jobs);
+  const incomeFiltered = filterJobsByIncome(facetFiltered);
   const query = els.searchInput.value.trim().toLowerCase();
-  if (!query) return facetFiltered;
-  return facetFiltered.filter((job) => [
+  if (!query) return incomeFiltered;
+  return incomeFiltered.filter((job) => [
     job.company,
     job.title,
     job.description,
@@ -1437,6 +1511,25 @@ function filterJobs(jobs) {
     ...(job.preferredSkills || []),
     job.notes
   ].join(" ").toLowerCase().includes(query));
+}
+
+function filterJobsByIncome(jobs) {
+  if (!isIncomeFilterActive()) return jobs;
+  return jobs.filter((job) => {
+    const range = getJobIncomeRange(job);
+    if (!range) return false;
+    return range.max >= state.incomeFilter.min && range.min <= state.incomeFilter.max;
+  });
+}
+
+function getJobIncomeRange(job) {
+  const min = Number.isFinite(job.annualIncomeMin) ? job.annualIncomeMin : null;
+  const max = Number.isFinite(job.annualIncomeMax) ? job.annualIncomeMax : null;
+  if (min === null && max === null) return null;
+  return {
+    min: min ?? max,
+    max: max ?? min
+  };
 }
 
 function filterJobsByFacet(jobs, filter) {

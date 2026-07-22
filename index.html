@@ -61,6 +61,21 @@
                 </div>
               </div>
               <div id="skillChart" class="skill-chart empty">データがありません</div>
+              <div class="income-filter" aria-label="年収フィルタ">
+                <div class="income-filter-head">
+                  <span>年収フィルタ</span>
+                  <strong id="incomeFilterValue">指定なし</strong>
+                </div>
+                <div class="income-range-control">
+                  <input id="incomeMinRange" type="range" min="0" max="3000" step="50" value="0" aria-label="年収下限">
+                  <input id="incomeMaxRange" type="range" min="0" max="3000" step="50" value="3000" aria-label="年収上限">
+                </div>
+                <div class="income-filter-scale" aria-hidden="true">
+                  <span id="incomeFilterMinLabel">0万円</span>
+                  <span id="incomeFilterMaxLabel">3000万円</span>
+                </div>
+                <button id="resetIncomeFilter" class="ghost-button compact-button" type="button" hidden>年収条件リセット</button>
+              </div>
             </section>
 
             <section class="panel compact-panel">
