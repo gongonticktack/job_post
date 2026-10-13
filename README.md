@@ -1,3 +1,5 @@
+🌐 **Webアプリ：[求人スキル分析アプリを開く](https://jobpostview.gongonticktack.workers.dev/)**
+
 # 求人スキル分析アプリ（job_post）
 
 ## 概要
