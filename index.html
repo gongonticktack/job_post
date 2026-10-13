@@ -137,7 +137,7 @@
           <form id="crawlForm" class="crawl-form">
             <label>
               求人一覧URL
-              <input id="crawlUrl" type="url" value="https://nttdata-career.jposting.net/joblist/index.html?t[]=10" placeholder="https://example.com/joblist" required>
+              <input id="crawlUrl" type="url" value="https://nttdata-career.jposting.net/u/job.phtml?job_category_code=34" placeholder="https://example.com/joblist" required>
             </label>
             <div class="form-row">
               <label>
@@ -161,6 +161,7 @@
           </form>
 
           <div id="crawlStatus" class="status">URLを入力してクロールを開始してください。</div>
+          <p class="helper-text">初期URLはNTTデータの公開求人一覧です。外部サイトがブラウザからの取得を拒否する場合はCloudflare Pages上のプロキシを使います。ローカルで開く場合は求人票の直接入力も利用できます。</p>
         </section>
 
         <section class="panel">

@@ -1,0 +1,87 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="../crawler.js"></script>
+<script>
+(async () => {
+  const results = [];
+  const originalFetch = window.fetch;
+  const detailUrl = "https://nttdata-career.jposting.net/u/job.phtml?job_code=1282";
+  const listUrl = "https://nttdata-career.jposting.net/u/job.phtml?job_category_code=34";
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const detail = `<h3>カテゴリ</h3><h4>インフラエンジニア</h4><table><tr><td><table>
+    <tr><td class="detailbg">職務内容</td><td class="jobbg">AWSでシステムを開発</td></tr>
+    <tr><td>【必要条件】求める経験・スキル・知識</td><td>JavaScript・AWS</td></tr>
+    <tr><td>【歓迎条件】求める経験・スキル・知識</td><td>Python</td></tr>
+    <tr><td>待遇</td><td>550-1400万円</td></tr>
+    <tr><td>勤務地</td><td>東京都</td></tr>
+    </table></td></tr></table><a href="?job_code=999">関連求人</a>`;
+  const eucHtml = (meta = "") => new Uint8Array([
+    ...new TextEncoder().encode(`${meta}<h4>Engineer</h4><table><tr><td>`),
+    // EUC-JP bytes for 職務内容, as served by jposting.
+    0xbf, 0xa6, 0xcc, 0xb3, 0xc6, 0xe2, 0xcd, 0xc6,
+    ...new TextEncoder().encode("</td><td>AWS development</td></tr></table>")
+  ]);
+  async function test(name, run) {
+    try { await run(); results.push({ name, ok: true }); }
+    catch (error) { results.push({ name, ok: false, error: error.message }); }
+  }
+  await test("EUC-JP charset header", async () => {
+    window.fetch = async () => new Response(eucHtml(), { headers: { "Content-Type": "text/html; charset=EUC-JP" } });
+    const [job] = await crawlJobsBrowser(detailUrl, "NTTデータ", 1);
+    assert(job.description === "AWS development", "EUC-JP label was not decoded/extracted");
+  });
+  await test("EUC-JP meta fallback", async () => {
+    window.fetch = async () => new Response(eucHtml('<meta http-equiv="Content-Type" content="text/html; charset=EUC-JP">'));
+    const [job] = await crawlJobsBrowser(detailUrl, "NTTデータ", 1);
+    assert(job.description === "AWS development", "meta charset was not used");
+  });
+  await test("UTF-8 table fields and direct detail URL", async () => {
+    let calls = 0;
+    window.fetch = async () => { calls++; return new Response(detail); };
+    const [job] = await crawlJobsBrowser(detailUrl, "NTTデータ", 10);
+    assert(calls === 1 && job.sourceUrl === detailUrl, "followed related jobs instead of the specified job");
+    assert(job.title === "インフラエンジニア", "wrong title");
+    assert(job.description === "AWSでシステムを開発", "td label/value not extracted");
+    assert(job.annualIncomeMin === 550 && job.annualIncomeMax === 1400, "salary missing");
+    assert(job.location === "東京都", "location missing");
+    assert(job.requiredSkills.includes("AWS") && job.requiredSkills.includes("JavaScript"), "required skills missing");
+    assert(job.preferredSkills.includes("Python"), "preferred skills missing");
+  });
+  await test("CORS fallback, relative links, deduplication and limit", async () => {
+    const requested = [];
+    window.fetch = async (url, options) => {
+      if (url !== "/api/proxy") throw new TypeError("Failed to fetch");
+      const payload = JSON.parse(options.body);
+      requested.push(payload.url);
+      return new Response(payload.url === listUrl
+        ? '<a href="?job_code=1282">job</a><a href="?job_code=1282">duplicate</a><a href="?job_code=999">other</a><a href="/joblist/">list</a>'
+        : detail);
+    };
+    const jobs = await crawlJobsBrowser(listUrl, "NTTデータ", 1);
+    assert(jobs.length === 1 && requested.length === 2, "limit/deduplication failed");
+    assert(requested[1] === detailUrl, "relative URL resolved incorrectly");
+  });
+  await test("HTTP failure is surfaced", async () => {
+    window.fetch = async (url) => {
+      if (url !== "/api/proxy") throw new TypeError("Failed to fetch");
+      return new Response("Target host is not allowed", { status: 403 });
+    };
+    try { await crawlJobsBrowser(detailUrl, "NTTデータ", 1); throw new Error("expected failure"); }
+    catch (error) { assert(error.message.includes("FETCH_HTTP_403"), error.message); }
+  });
+  window.fetch = originalFetch;
+  if (new URLSearchParams(location.search).has("live")) {
+    await test("live NTT DATA list through Workers proxy", async () => {
+      const jobs = await crawlJobsBrowser(listUrl, "NTTデータ", 2);
+      assert(jobs.length === 2, `expected 2 jobs, got ${jobs.length}`);
+      for (const job of jobs) {
+        assert(job.title && job.description && job.location, "live job fields missing");
+        assert(!/[\uFFFD]/.test(job.title + job.description), "live job text is corrupted");
+        assert(job.annualIncomeMin > 0, "live salary missing");
+      }
+    });
+  }
+  document.body.textContent = JSON.stringify(results);
+  await originalFetch("/results", { method: "POST", body: JSON.stringify(results) });
+})();
+</script>

@@ -48,7 +48,8 @@ export async function onRequestPost({ request }) {
   if (contentType) responseHeaders.set("Content-Type", contentType);
   responseHeaders.set("Cache-Control", "no-store");
 
-  return new Response(await upstream.text(), {
+  // Preserve the original bytes and charset; text() would corrupt EUC-JP HTML.
+  return new Response(await upstream.arrayBuffer(), {
     status: upstream.status,
     headers: responseHeaders
   });

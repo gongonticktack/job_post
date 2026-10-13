@@ -20,6 +20,10 @@ Supabaseを使う場合は、`schema.sql` をSupabaseのSQL Editorで実行し�
 
 求人クロールは取得先サイトのCORS制限を受けます。Cloudflare Pages Functionsを使える環境では、`functions/api/proxy.js` の許可ホスト経由で一部サイトを取得できます。取得に失敗した場合は、画面に `FETCH_HTTP_403` や `FETCH_NETWORK_ERROR` のようなエラーコードと詳細が表示されます。
 
+Cloudflare Workersでは `worker.js` が同じ `/api/proxy` を提供します。静的ファイルだけをWorkersへアップロードするとAPIは404になるため、下記のWrangler設定でWorkerと静的ファイルをまとめて配信してください。取得したHTMLはHTTPヘッダーまたはmetaタグの文字コードで読み込み、NTTデータのEUC-JPにも対応します。プロキシは元のバイト列を維持します。
+
+初期入力には、求人リンクがHTMLに含まれるNTTデータの公開一覧 `https://nttdata-career.jposting.net/u/job.phtml?job_category_code=34` を使っています。`/joblist/` の検索画面はJavaScriptで求人を表示するため、このクローラーでは一覧として取得できません。ブラウザで `index.html` を直接開いた場合、外部サイトのCORS制限によりURL取得が失敗することがあります。URL取得を利用する場合はCloudflare Pages Functionsを含めて配信してください。
+
 ## ファイル構成
 
 ### `index.html`
@@ -190,5 +194,21 @@ Cloudflare Pagesで公開する場合:
 
 - Build command: 空
 - Build output directory: `/`
+
+Cloudflare Workersで公開する場合（現在の `jobpostview` 向け）:
+
+- リポジトリのルートで `npx wrangler deploy` を実行します。
+- CloudflareのGit連携では、Build commandを空にし、Deploy commandを `npx wrangler deploy`、Root directoryをこのリポジトリのルートに設定します。
+- `wrangler.jsonc` が `worker.js` と静的ファイルを配信し、`/api/*` をWorkerで処理します。`.assetsignore` はブラウザで必要なファイルだけを公開対象にします。
+- ローカルでAPIも確認する場合は `npx wrangler dev` を使います。簡易HTTPサーバーだけでは `/api/proxy` は動きません。
+- 再配信後、`/api/proxy` へのGETが405（`Allow: POST, OPTIONS`）になり、画面のクロールが成功することを確認します。
+
+Workersの配信設定: https://developers.cloudflare.com/workers/static-assets/binding/
+
+修正確認用テスト:
+
+- `node --test tests/proxy.test.mjs`: Workersのルーティングとプロキシの文字コード維持を確認します。
+- `node tests/run-browser.mjs`: Chromeで求人抽出とCORSフォールバックを確認します。Chromeが標準パスにない場合は、第1引数にブラウザ実行ファイルのパスを指定します。
+- `node tests/run-browser.mjs --live`: 実際のNTTデータ一覧から2件を取得し、Workerのプロキシ経由で日本語・年収・勤務地を確認します。ネット接続が必要です。
 
 ローカルで確認する場合は、静的ファイルとして `index.html` を開くか、任意の簡易HTTPサーバーから配信してください。

@@ -11,7 +11,7 @@
 
   window.crawlJobsBrowser = async function crawlJobsBrowser(listUrl, company, limit, onStatus = () => {}) {
     const isFujitsu = isFujitsuJobsUrl(listUrl);
-    if (isFujitsu && isFujitsuJobDetailUrl(listUrl)) {
+    if ((isFujitsu && isFujitsuJobDetailUrl(listUrl)) || isNttDataDetailUrl(listUrl)) {
       const html = await fetchText(listUrl);
       const parsed = parseJobDetail(html, listUrl, company);
       return parsed.description ? [parsed] : [];
@@ -23,21 +23,29 @@
       : extractJobLinks(listHtml, listUrl)).slice(0, limit);
     if (!detailUrls.length) {
       if (isFujitsu) return [];
+      if (isNttDataDynamicListUrl(listUrl)) {
+        throw new Error("この求人一覧はJavaScriptで表示されます。NTTデータの /u/job.phtml?job_category_code=34 のような公開一覧URLを指定してください。");
+      }
       const parsed = parseJobDetail(listHtml, listUrl, company);
       return parsed.description ? [parsed] : [];
     }
 
     const jobs = [];
+    let lastError;
     for (const detailUrl of detailUrls) {
       onStatus(`詳細ページを取得しています... ${jobs.length + 1}/${detailUrls.length}`);
       try {
         const html = await fetchText(detailUrl);
         const job = parseJobDetail(html, detailUrl, company);
-        if (job.description || job.requiredSkills.length || job.preferredSkills.length) jobs.push(job);
+        if (isNttDataDetailUrl(detailUrl)
+          ? job.title && job.description
+          : job.description || job.requiredSkills.length || job.preferredSkills.length) jobs.push(job);
       } catch (error) {
+        lastError = error;
         console.warn("detail fetch failed", detailUrl, error);
       }
     }
+    if (!jobs.length && lastError) throw lastError;
     return jobs;
   };
 
@@ -53,7 +61,7 @@
           detail
         }));
       }
-      return response.text();
+      return await decodeHtmlResponse(response);
     } catch (error) {
       if (/^FETCH_/.test(error.message)) throw error;
       throw new Error(formatFetchError("FETCH_NETWORK_ERROR", {
@@ -62,6 +70,16 @@
         detail: error.message || String(error)
       }));
     }
+  }
+
+  async function decodeHtmlResponse(response) {
+    const bytes = await response.arrayBuffer();
+    const contentType = response.headers.get("Content-Type") || "";
+    const headerCharset = contentType.match(/charset\s*=\s*["']?([^\s;"']+)/i)?.[1];
+    // HTML may declare its encoding only in a meta tag. The declaration is ASCII.
+    const prefix = new TextDecoder("utf-8").decode(bytes.slice(0, 4096));
+    const metaCharset = prefix.match(/<meta\b[^>]*charset\s*=\s*["']?([^\s;"'/>]+)/i)?.[1];
+    return new TextDecoder(headerCharset || metaCharset || "utf-8").decode(bytes);
   }
 
   async function readErrorResponseText(response) {
@@ -79,8 +97,19 @@
   function extractJobLinks(html, baseUrl) {
     const doc = new DOMParser().parseFromString(html, "text/html");
     const links = [...doc.querySelectorAll("a[href]")]
-      .map((anchor) => new URL(anchor.getAttribute("href"), baseUrl).href)
-      .filter((href) => /job|career|recruit|posting|detail|id=|no=/i.test(href));
+      .map((anchor) => {
+        try { return new URL(anchor.getAttribute("href"), baseUrl).href; }
+        catch { return ""; }
+      })
+      .filter((href) => {
+        if (!href || !/^https?:/i.test(href)) return false;
+        if (isNttDataUrl(baseUrl)) {
+          const url = new URL(href);
+          return url.hostname === new URL(baseUrl).hostname &&
+            url.pathname === "/u/job.phtml" && url.searchParams.has("job_code");
+        }
+        return /job|career|recruit|posting|detail|id=|no=/i.test(href);
+      });
     return [...new Set(links)].filter((href) => href !== baseUrl);
   }
 
@@ -142,7 +171,9 @@
     try {
       return await fetch(url, options);
     } catch (directError) {
-      if (!/^https?:$/.test(window.location.protocol)) throw directError;
+      if (!/^https?:$/.test(window.location.protocol)) {
+        throw new Error("ローカルファイルでは外部サイトを取得できません。Cloudflare Pagesで公開するか、求人票を直接入力してください。");
+      }
       const response = await fetch("/api/proxy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -177,6 +208,9 @@
   function parseJobDetail(html, sourceUrl, company) {
     const doc = new DOMParser().parseFromString(html, "text/html");
     const bodyText = doc.body?.innerText || doc.body?.textContent || "";
+    if (isNttDataDetailUrl(sourceUrl)) {
+      return parseNttDataJobDetail(doc, bodyText, sourceUrl, company);
+    }
     if (isAccentureCareersUrl(sourceUrl) || /アクセンチュア株式会社|アクセンチュア/.test(bodyText)) {
       return parseAccentureJobDetail(bodyText, sourceUrl, company);
     }
@@ -213,6 +247,47 @@
       sourceUrl,
       crawledAt: new Date().toISOString()
     };
+  }
+
+  function parseNttDataJobDetail(doc, bodyText, sourceUrl, company) {
+    const sections = readLabeledSections(doc);
+    const text = cleanText(bodyText);
+    const title = cleanText(doc.querySelector("h4")?.textContent || doc.querySelector("h3")?.textContent || "");
+    const description = firstSection(sections, ["職務内容", "仕事内容"]);
+    const incomeRaw = firstSection(sections, ["待遇", "想定年収", "給与"]);
+    const income = parseIncome(incomeRaw);
+    const requiredRaw = firstSection(sections, ["必要条件", "必須条件"]);
+    const preferredRaw = firstSection(sections, ["歓迎条件"]);
+    const location = firstSection(sections, ["勤務地"]);
+    return {
+      company,
+      title,
+      description: description || sliceAround(text, /職務内容/),
+      annualIncomeRaw: incomeRaw,
+      annualIncomeMin: income.min,
+      annualIncomeMax: income.max,
+      requiredSkills: extractSkills(requiredRaw || description),
+      preferredSkills: extractSkills(preferredRaw),
+      notes: location ? `勤務地: ${location}` : "",
+      location,
+      sourceUrl,
+      crawledAt: new Date().toISOString()
+    };
+  }
+
+  function isNttDataUrl(url) {
+    try { return new URL(url).hostname === "nttdata-career.jposting.net"; }
+    catch { return false; }
+  }
+
+  function isNttDataDetailUrl(url) {
+    if (!isNttDataUrl(url)) return false;
+    const parsed = new URL(url);
+    return parsed.pathname === "/u/job.phtml" && parsed.searchParams.has("job_code");
+  }
+
+  function isNttDataDynamicListUrl(url) {
+    return isNttDataUrl(url) && new URL(url).pathname.startsWith("/joblist/");
   }
 
   function parseIbmJobDetail(bodyText, sourceUrl, fallbackCompany) {
@@ -458,6 +533,17 @@
     const sections = {};
     const rows = doc.querySelectorAll("tr, dl, .item, .section, section");
     rows.forEach((row) => {
+      // jposting uses two td cells rather than th/td for its label/value rows.
+      if (row.tagName === "TR") {
+        const cells = [...row.children].filter((cell) => /^(TH|TD)$/.test(cell.tagName));
+        if (cells.length === 2 && !cells.some((cell) => cell.querySelector("table"))) {
+          const label = cleanText(cells[0].textContent);
+          const value = cleanText(cells[1].textContent);
+          if (label && value && label.length <= 40) sections[label] = value;
+          return;
+        }
+        if (row.querySelector("table")) return;
+      }
       const label = cleanText(row.querySelector("th, dt, h2, h3, .label, .ttl, .title")?.textContent || "");
       const value = cleanText(row.querySelector("td, dd, p, .content, .txt, .detail")?.textContent || "");
       if (label && value && label.length <= 40) sections[label] = value;
