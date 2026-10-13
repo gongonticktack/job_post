@@ -1,0 +1,42 @@
+<!doctype html><meta charset="utf-8"><iframe id="app" src="/index.html"></iframe>
+<script>
+(async () => {
+ const frame=document.querySelector('#app');await new Promise(r=>frame.onload=r);const w=frame.contentWindow;
+ for(let i=0;i<150&&w.document.querySelector('#crawlCompanySelect').options.length<8;i++)await new Promise(r=>setTimeout(r,20));
+ const snapshot=await(await fetch('/snapshot')).json();
+ for(const type of ['skill','certification']){const key=type+'Dictionary';w.JobParserConfig[key]=[...new Set([...w.JobParserConfig[key],...snapshot.tables.dictionary_terms.filter(t=>t.dictionary_type===type).map(t=>t.term)])];}
+ const stage=await(await fetch('/replacement')).json();
+ function accept(job,report){
+  job.title=job.title.replace(/\s*NEW\s*!?\s*$/i,'').trim();
+  if(w.isSalesJob(job)||w.classifyJobDomain(job)!=='it'){report.excluded++;return;}
+  if(!job.sourceDocument?.fullText||!job.description)throw Error('本文未取得');
+  stage.jobs.push(w.normalizeClientJob(w.repairJobRequirements(job)));report.accepted++;
+ }
+ for(const report of stage.reports){
+  if(!report.complete){
+   try{const jobs=await w.crawlJobsBrowser(w.JobParserConfig.companies[report.company].listUrl,report.company,1000);report.catalogCount=jobs.length;report.accepted=0;report.excluded=0;report.failed=[];jobs.forEach(job=>accept(job,report));report.complete=true;}catch(error){report.failed=[{error:error.message}];}
+   continue;
+  }
+  const failed=[];
+  for(const item of report.failed){
+   if(w.isSalesJob(item)||w.classifyJobDomain(item)==='non-it'){report.excluded++;continue;}
+   try{const [job]=await w.crawlJobsBrowser(item.url,report.company,1);if(!job)throw Error('抽出不可');job.title=item.title||job.title;accept(job,report);}catch(error){failed.push({...item,error:error.message});}
+  }
+  report.failed=failed;
+  await fetch('/progress',{method:'POST',body:report.company+': 再確認後の取得不可 '+failed.length+'件'});
+ }
+ for(const [company,config] of Object.entries(w.JobParserConfig.companies)){
+  if(stage.reports.some(r=>r.company===company))continue;
+  const report={company,catalogCount:0,accepted:0,excluded:0,failed:[],complete:false};stage.reports.push(report);
+  try{const jobs=await w.crawlJobsBrowser(config.listUrl,company,1000);report.catalogCount=jobs.length;jobs.forEach(job=>accept(job,report));report.complete=true;}catch(error){report.failed.push({error:error.message});}
+ }
+ const companyByHost={'progres07.jposting.net':'株式会社野村総合研究所','www.jobs.global.fujitsu.com':'富士通株式会社','nttdata-career.jposting.net':'株式会社NTTデータ','jobs.nec-careers.com':'NEC','js03.jposting.net':'株式会社トヨタシステムズ','toyota-career.snar.jp':'トヨタ自動車株式会社','www.accenture.com':'アクセンチュア株式会社','careers.ibm.com':'日本アイ・ビー・エム株式会社'};
+ stage.jobs=stage.jobs.map(job=>{
+  const company=companyByHost[new URL(job.sourceUrl).hostname];if(!company)throw Error('取得元企業不明');
+  const parsed=w.reparseJobDocument({...job,company});
+  return w.compactJobSourceDocument(w.normalizeClientJob(w.repairJobRequirements({...parsed,title:job.title.replace(/\s*NEW\s*!?\s*$/i,'').trim(),company})));
+ }).filter(job=>w.classifyJobDomain(job)==='it'&&!w.isSalesJob(job));
+ const unique=new Map();for(const job of stage.jobs)unique.set(job.sourceUrl,job);stage.jobs=[...unique.values()];
+ await fetch('/results',{method:'POST',body:JSON.stringify(stage)});
+})();
+</script>

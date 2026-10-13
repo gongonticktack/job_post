@@ -1,0 +1,52 @@
+<!doctype html><meta charset="utf-8"><iframe id="app" src="/index.html"></iframe>
+<script>
+(async () => {
+ const frame=document.querySelector('#app');await new Promise(r=>frame.onload=r);const w=frame.contentWindow;
+ for(let i=0;i<150&&w.document.querySelector('#crawlCompanySelect').options.length<8;i++)await new Promise(r=>setTimeout(r,20));
+ const data=await(await fetch('/snapshot')).json();
+ for(const type of ['skill','certification']){const key=type+'Dictionary';w.JobParserConfig[key]=[...new Set([...w.JobParserConfig[key],...data.tables.dictionary_terms.filter(t=>t.dictionary_type===type).map(t=>t.term)])];}
+ const normalize=s=>String(s||'').normalize('NFKC').replace(/<\d+>/g,'').replace(/\(\d+名募集\)/g,'').replace(/\s+/g,'').replace(/NEW!?$/i,'').trim();
+ const coreTitle=s=>normalize(s).replace(/^【[^】]+】/,'').replace(/\(データサイエンティスト\)$/,'');
+ const positionCode=s=>String(s||'').normalize('NFKC').match(/(?:^|[^A-Za-z])((?:EC|CO|FS|SB|IFIS|IFCA|PC)-\d+(?:-[a-z])?)/)?.[1]||'';
+ const refreshed=[],unmatched=[],failures=[],excluded=[];
+ const byCompany=new Map();
+ for(const row of data.tables.jobs){const company=w.canonicalCompanyName(data.tables.companies.find(c=>c.id===row.company_id)?.name);if(!byCompany.has(company))byCompany.set(company,[]);byCompany.get(company).push(row);}
+ async function progress(text){await fetch('/progress',{method:'POST',body:text});}
+ for(const [company,rows] of byCompany){
+  const listUrl=w.JobParserConfig.companies[company]?.listUrl;
+  if(!listUrl){failures.push(...rows.map(row=>({id:row.id,title:row.title,error:'求人一覧URLなし'})));continue;}
+  await progress(company+': '+rows.length+'件を照合');
+  const matches=new Map();
+  try {
+   if(/accenture.com|www.ibm.com/.test(listUrl)){
+    const current=await w.crawlJobsBrowser(listUrl,company,1000);
+    for(const row of rows){const hit=current.filter(job=>normalize(job.title)===normalize(row.title));if(hit.length===1)matches.set(row.id,hit[0]);else if(hit.length>1)unmatched.push({id:row.id,title:row.title,reason:'同名の求人が複数あります'});}
+   }else if(/toyota-career.snar.jp/.test(listUrl)){
+    const titles=new Set(rows.map(row=>normalize(row.title)));
+    const current=await w.crawlToyotaSelectedJobs(listUrl,company,title=>titles.has(normalize(title)));
+    for(const row of rows){const hit=current.filter(job=>normalize(job.title)===normalize(row.title));if(hit.length===1)matches.set(row.id,hit[0]);}
+   }else{
+    const catalog=await w.getJobSourceCatalog(listUrl);
+    for(const row of rows){
+     let candidates=catalog.filter(item=>normalize(item.title)===normalize(row.title));
+     if(!candidates.length&&company==='株式会社NTTデータ')candidates=catalog.filter(item=>coreTitle(item.title)===coreTitle(row.title));
+     if(!candidates.length&&company==='株式会社トヨタシステムズ'&&positionCode(row.title))candidates=catalog.filter(item=>positionCode(item.title)===positionCode(row.title));
+     const urls=[...new Set(candidates.map(item=>item.url))];
+     let url=urls.length===1?urls[0]:row.source_url.startsWith('https://')?row.source_url:null;
+     if(!url)continue;
+     try{const [job]=await w.crawlJobsBrowser(url,company,1);const catalogTitle=candidates.find(item=>item.url===url)?.title;if(!job||(normalize(job.title)!==normalize(row.title)&&normalize(job.title)!==normalize(catalogTitle||''))){failures.push({id:row.id,title:row.title,error:'求人タイトルが一致しません',actualTitle:job?.title});continue;}matches.set(row.id,job);}catch(error){failures.push({id:row.id,title:row.title,error:error.message});}
+    }
+   }
+  } catch(error){failures.push(...rows.map(row=>({id:row.id,title:row.title,error:error.message})));}
+  for(const row of rows){
+   const job=matches.get(row.id);
+   if(!job){if(!failures.some(f=>f.id===row.id)&&!unmatched.some(f=>f.id===row.id))unmatched.push({id:row.id,title:row.title,company,reason:'公式一覧で同じ求人を確認できません'});continue;}
+   if(w.classifyJobDomain(job)==='non-it'||w.isSalesJob(job)){excluded.push({id:row.id,title:row.title});continue;}
+   if(!job.sourceDocument?.fullText){failures.push({id:row.id,title:row.title,error:'求人全文が取得できません'});continue;}
+   refreshed.push({id:row.id,job:w.normalizeClientJob(w.repairJobRequirements(job))});
+  }
+  await progress(company+': 更新候補 '+matches.size+'件 / 全体 '+refreshed.length+'件');
+ }
+ await fetch('/results',{method:'POST',body:JSON.stringify({refreshed,unmatched,failures,excluded,backupCreatedAt:data.createdAt})});
+})();
+</script>

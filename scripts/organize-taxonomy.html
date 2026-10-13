@@ -1,0 +1,29 @@
+<!doctype html><meta charset="utf-8"><iframe id="app" src="/index.html"></iframe>
+<script>
+(async()=>{
+ try {
+  const frame=document.querySelector('#app');await new Promise(resolve=>frame.onload=resolve);const w=frame.contentWindow;
+  for(let i=0;i<150&&w.document.querySelector('#crawlCompanySelect').options.length<8;i++)await new Promise(resolve=>setTimeout(resolve,20));
+  const backup=await(await fetch('/snapshot')).json();const config=w.JobParserConfig;
+  const categories=backup.tables.dictionary_categories;
+  const entries={};
+  for(const type of ['skill','certification']){
+   entries[type]=w.normalizeDictionaryEntries([...config[type+'Dictionary'],...backup.tables.dictionary_terms.filter(row=>row.dictionary_type===type).map(row=>({term:row.term,category:categories.find(category=>category.id===row.category_id)?.category||row.category,color:categories.find(category=>category.id===row.category_id)?.color||row.color}))],type);
+   config[type+'Dictionary']=entries[type].map(entry=>entry.term);
+  }
+  const jobs=[];const failures=[];let fallback=0;
+  for(const row of backup.tables.jobs){
+   const old=w.toClientJob({...row,company:backup.tables.companies.find(company=>company.id===row.company_id)?.name});
+   try{
+    const parsed=w.reparseJobDocument(old);
+    let raw=w.getRequirementRaw(parsed);
+    if(!raw.reliable||(!raw.required&&!raw.preferred)){raw=w.getRequirementRaw(old);fallback++;}
+    const candidate=w.repairJobRequirements({...old,referenceInfo:raw.reliable?w.buildRequirementReference(old.referenceInfo,raw.required,raw.preferred):old.referenceInfo});
+    jobs.push({id:row.id,title:old.title,company:old.company,requiredSkills:candidate.requiredSkills,preferredSkills:candidate.preferredSkills,requiredCertifications:candidate.requiredCertifications,preferredCertifications:candidate.preferredCertifications,referenceInfo:candidate.referenceInfo});
+   }catch(error){failures.push({id:row.id,title:old.title,error:error.message});}
+   if(jobs.length%200===0){await fetch('/progress',{method:'POST',body:'全文から整理 '+jobs.length+'件'});await new Promise(resolve=>setTimeout(resolve,0));}
+  }
+  await fetch('/results',{method:'POST',body:JSON.stringify({backupCreatedAt:backup.createdAt,entries,jobs,failures,fallback})});
+ }catch(error){await fetch('/results',{method:'POST',body:JSON.stringify({error:error.message})});}
+})();
+</script>

@@ -4,6 +4,7 @@
 <script>
 (async () => {
   const results = [];
+  let liveAppFrame;
   const originalFetch = window.fetch;
   const detailUrl = "https://nttdata-career.jposting.net/u/job.phtml?job_code=1282";
   const listUrl = "https://nttdata-career.jposting.net/u/job.phtml?job_category_code=34";
@@ -12,6 +13,8 @@
     <tr><td class="detailbg">職務内容</td><td class="jobbg">AWSでシステムを開発</td></tr>
     <tr><td>【必要条件】求める経験・スキル・知識</td><td>JavaScript・AWS</td></tr>
     <tr><td>【歓迎条件】求める経験・スキル・知識</td><td>Python</td></tr>
+    <tr><td>【必要条件】資格</td><td>PMP</td></tr>
+    <tr><td>【歓迎条件】資格</td><td>応用情報技術者</td></tr>
     <tr><td>待遇</td><td>550-1400万円</td></tr>
     <tr><td>勤務地</td><td>東京都</td></tr>
     </table></td></tr></table><a href="?job_code=999">関連求人</a>`;
@@ -46,6 +49,7 @@
     assert(job.location === "東京都", "location missing");
     assert(job.requiredSkills.includes("AWS") && job.requiredSkills.includes("JavaScript"), "required skills missing");
     assert(job.preferredSkills.includes("Python"), "preferred skills missing");
+    assert(job.requiredCertifications === "PMP" && job.preferredCertifications === "応用情報技術者", "certification fields missing");
   });
   await test("CORS fallback, relative links, deduplication and limit", async () => {
     const requested = [];
@@ -69,7 +73,104 @@
     try { await crawlJobsBrowser(detailUrl, "NTTデータ", 1); throw new Error("expected failure"); }
     catch (error) { assert(error.message.includes("FETCH_HTTP_403"), error.message); }
   });
+  await test("IBM list API does not register incomplete search results", async () => {
+    window.fetch = async (url) => new Response(url.includes("search/api/v2")
+      ? JSON.stringify({hits:{hits:[{_source:{url:"https://careers.ibm.com/careers/JobDetail?jobId=123"}}]}})
+      : "", {status: url.includes("search/api/v2") ? 200 : 202});
+    const jobs = await crawlJobsBrowser("https://www.ibm.com/jp-ja/careers/search", "日本IBM", 1);
+    assert(jobs.length === 0, "registered an incomplete search result");
+  });
+  await test("IBM full indexed body is available without restricted detail pages", async () => {
+    let calls = 0;
+    window.fetch = async (url, options) => {
+      calls++;
+      assert(url.includes("search/api/v2"), "requested restricted detail page");
+      assert(JSON.parse(options.body)._source.includes("body"), "full body not requested");
+      return new Response(JSON.stringify({ hits: { hits: [{ _source: {
+        url: "https://careers.ibm.com/careers/JobDetail?jobId=123", title: "Engineer", body: "Full official job body"
+      }}] }}));
+    };
+    const [job] = await crawlJobsBrowser("https://www.ibm.com/jp-ja/careers/search", "日本IBM", 1);
+    assert(calls === 1 && job.description === "Full official job body", "official full body not used");
+    assert(job.annualIncomeMin === null && !job.requiredSkills.length, "inferred unpublished salary/requirements");
+  });
   window.fetch = originalFetch;
+  await test("company dropdown, shared parser and HTML line boundaries", async () => {
+    const frame = document.createElement("iframe");
+    frame.src = "/index.html"; document.body.append(frame);
+    await new Promise((resolve) => frame.onload = resolve);
+    const w = frame.contentWindow;
+    const appFetch = w.fetch;
+    // The real application initializes with IndexedDB; the test server has no Supabase config.
+    for (let i = 0; i < 100 && !w.eval("state.db"); i++) await new Promise((resolve) => setTimeout(resolve, 20));
+    assert(w.eval("Boolean(state.db)"), "application initialization failed");
+    const select = w.document.querySelector("#crawlCompanySelect");
+    for (let i = 0; i < 100 && select.options.length < Object.keys(w.JobParserConfig.companies).length + 1; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    select.value = "NEC"; select.dispatchEvent(new w.Event("change"));
+    assert(w.document.querySelector("#crawlUrl").value === "https://jobs.nec-careers.com/u/job.phtml", "company URL not populated");
+    for (const [company, config] of Object.entries(w.JobParserConfig.companies)) {
+      select.value = company; select.dispatchEvent(new w.Event("change"));
+      assert(w.document.querySelector("#crawlUrl").value === config.listUrl, `wrong URL for ${company}`);
+      assert(w.document.querySelector("#companyName").closest("label").hidden, "redundant company input visible");
+    }
+    select.value = "custom"; select.dispatchEvent(new w.Event("change"));
+    assert(w.document.querySelector("#crawlUrl").value === "", "previous company's URL left in custom entry");
+    assert(!w.document.querySelector("#companyName").closest("label").hidden, "custom company input hidden");
+    w.document.querySelector("#crawlUrl").value = "https://example.com/my-jobs";
+    w.updateCompanyOptions();
+    assert(w.document.querySelector("#crawlUrl").value === "https://example.com/my-jobs", "refresh overwrote custom URL");
+    const form = w.document.querySelector("#crawlForm");
+    assert(form.firstElementChild.querySelector("#crawlCompanySelect"), "company is not first in form");
+    w.fetch = async () => new w.Response(`<h1></h1><h2>インフラエンジニア</h2><dl>
+      <dt>職務内容 / Job duties</dt><dd>【職務内容】<br>AWSを用いた開発<br>要件定義を担当</dd>
+      <dt>応募資格 / Qualifications</dt><dd>【MUST】<br>JavaScriptの経験<br>PMP<br>【WANT】<br>Pythonの経験<br>応用情報技術者</dd>
+      <dt>待遇 / Salary &amp; Benefits</dt><dd>【想定報酬】<br>600-900万円</dd><dt>勤務地 / Location</dt><dd>東京都</dd></dl>`);
+    const [job] = await w.crawlJobsBrowser("https://jobs.nec-careers.com/u/job.phtml?job_code=1", "NEC", 1);
+    assert(job.title === "インフラエンジニア" && job.description.includes("要件定義"), "title or description missing");
+    assert(job.requiredSkills.includes("JavaScript") && !job.requiredSkills.includes("Python"), "required section mixed with preferred");
+    assert(job.preferredSkills.includes("Python"), "preferred section missing");
+    assert(job.requiredCertifications.includes("PMP") && job.preferredCertifications.includes("応用情報技術者"), "shared certification extraction failed");
+    assert(job.sourceDocument.fullText.includes("JavaScript") && job.sourceDocument.fullText.includes("Python"), "full source text missing");
+    const reparsed = w.reparseJobDocument(job);
+    assert(reparsed.requiredSkills.includes("JavaScript") && reparsed.preferredSkills.includes("Python"), "stored document reparse failed");
+    w.eval(`state.jobs=[{company:'NEC',title:'Cloud Engineer',description:'Cloud development',location:'東京都 / 愛知県',requiredSkills:['AWS'],preferredSkills:['Python'],annualIncomeRaw:'600-900万円',annualIncomeMin:600,annualIncomeMax:900,sourceUrl:'manual:demo1'},
+      {company:'NEC',title:'Data Engineer',description:'Analytics',location:'大阪府',requiredSkills:['SQL'],preferredSkills:[],annualIncomeRaw:'700-1000万円',annualIncomeMin:700,annualIncomeMax:1000,sourceUrl:'manual:demo2'}];render();`);
+    assert(w.document.querySelectorAll("#jobList .job-card").length === 2, "comparison list did not render");
+    const region = w.document.querySelector("#regionFilter");
+    region.value = "東京都"; region.dispatchEvent(new w.Event("change"));
+    assert(w.document.querySelectorAll("#jobList .job-card").length === 1, "region filter failed");
+    assert(w.document.querySelector("#resultCount").textContent === "1 / 2件", "result count incorrect");
+    w.document.querySelector("#resetAllFilters").click();
+    assert(w.document.querySelectorAll("#jobList .job-card").length === 2, "clear all failed");
+    w.eval(`state.jobs=[normalizeClientJob({company:'アクセンチュア株式会社',title:'クラウドエンジニア',description:'開発',location:'東京都',requiredSkills:['AWS'],preferredSkills:[],annualIncomeMin:null,annualIncomeMax:null,annualIncomeRaw:'',sourceUrl:'manual:salary'})];render();`);
+    assert(w.document.querySelector('#jobList .income').textContent.includes('推定 550〜950万円'), 'estimated salary not labelled');
+    assert(!w.document.querySelector('#jobList .income-estimate').hidden && w.document.querySelector('#jobList .income-estimate-source').href==='https://openmoney.jp/corporations/10/salaries', 'estimate provenance missing');
+    assert(w.document.querySelector('#avgIncomeLabel').textContent.includes('推定含む'), 'aggregate estimate label missing');
+    w.document.querySelector('#incomeMinRange').value='800';w.document.querySelector('#incomeMinRange').dispatchEvent(new w.Event('input'));
+    assert(w.document.querySelectorAll('#jobList .job-card').length===1, 'estimate excluded from income overlap filter');
+    w.document.querySelector('#incomeMinRange').value='1000';w.document.querySelector('#incomeMinRange').dispatchEvent(new w.Event('input'));
+    assert(w.document.querySelectorAll('#jobList .job-card').length===0, 'estimate income filter did not narrow range');
+    w.eval(`state.jobs=Array.from({length:55},(_,i)=>({id:i,company:'NEC',title:'Demo '+i,description:'開発',requiredSkills:['Kubernetes'],preferredSkills:[],location:'東京都',annualIncomeMin:600,annualIncomeMax:900}));switchView('settings');`);
+    const search = w.document.querySelector('#dictionarySearch'); search.value='K8s';search.dispatchEvent(new w.Event('input'));
+    const visibleDictionary = [...w.document.querySelectorAll('#skillDictionaryEditor [data-dictionary-row]')].filter(row=>!row.hidden);
+    assert(visibleDictionary.length===1&&visibleDictionary[0].querySelector('[data-dictionary-field=term]').value==='Kubernetes','alias search failed');
+    assert(visibleDictionary[0].querySelector('.dictionary-usage').textContent==='55件で使用','dictionary job usage is incorrect');
+    const termInput=visibleDictionary[0].querySelector('[data-dictionary-field=term]');termInput.value='DraftSkill';termInput.dispatchEvent(new w.Event('input',{bubbles:true}));
+    assert(w.document.querySelector('#dictionaryDirtyStatus').textContent.includes('未保存'),'dirty state not shown');
+    w.switchView('top');w.switchView('settings');assert(termInput.isConnected&&termInput.value==='DraftSkill','leaving settings lost unsaved edits');
+    w.document.querySelector('[data-settings-tab=jobs]').click();
+    assert(w.document.querySelectorAll('#settingsJobList .settings-job-item').length===25,'job management not paginated');
+    w.document.querySelector('#settingsJobsNext').click();w.document.querySelector('#settingsJobsNext').click();
+    assert(w.document.querySelectorAll('#settingsJobList .settings-job-item').length===5,'last job page incorrect');
+    const jobSearch=w.document.querySelector('#settingsJobSearch');jobSearch.value='Demo 54';jobSearch.dispatchEvent(new w.Event('input'));
+    assert(w.document.querySelectorAll('#settingsJobList .settings-job-item').length===1&&w.document.querySelector('#settingsJobPage').textContent==='1 / 1','job search failed or page did not reset');
+    w.document.querySelector('[data-settings-tab=certification]').click();assert(!w.document.querySelector('#settingsPaneCertification').hidden&&w.document.querySelector('#settingsPaneJobs').hidden,'settings tabs failed');
+    w.fetch = appFetch;
+    if (new URLSearchParams(location.search).has("live")) liveAppFrame = frame;
+    else frame.remove();
+  });
   if (new URLSearchParams(location.search).has("live")) {
     await test("live NTT DATA list through Workers proxy", async () => {
       const jobs = await crawlJobsBrowser(listUrl, "NTTデータ", 2);
@@ -80,6 +181,18 @@
         assert(job.annualIncomeMin > 0, "live salary missing");
       }
     });
+    if (liveAppFrame) {
+      const w = liveAppFrame.contentWindow;
+      for (const [company, config] of Object.entries(w.JobParserConfig.companies)) {
+        await test(`live company preset: ${company}`, async () => {
+          const jobs = await w.crawlJobsBrowser(config.listUrl, company, 1);
+          assert(jobs.length === 1, `expected one job, got ${jobs.length}`);
+          assert(jobs[0].title && jobs[0].description, "missing title/description");
+          assert(!/\uFFFD/.test(jobs[0].description), "corrupted Japanese text");
+        });
+      }
+      liveAppFrame.remove();
+    }
   }
   document.body.textContent = JSON.stringify(results);
   await originalFetch("/results", { method: "POST", body: JSON.stringify(results) });

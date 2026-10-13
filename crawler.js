@@ -10,7 +10,16 @@
   ];
 
   window.crawlJobsBrowser = async function crawlJobsBrowser(listUrl, company, limit, onStatus = () => {}) {
+    const selectedUrl = new URL(listUrl);
+    if (selectedUrl.hostname === "www.accenture.com" && selectedUrl.pathname.includes("/careers/jobsearch")) {
+      return crawlAccentureApi(limit, onStatus);
+    }
+    if (selectedUrl.hostname === "toyota-career.snar.jp" && /\/index.aspx$/i.test(selectedUrl.pathname)) {
+      return crawlToyotaList(listUrl, company, limit, onStatus);
+    }
     const isFujitsu = isFujitsuJobsUrl(listUrl);
+    const isIbmList = selectedUrl.hostname === "www.ibm.com" && selectedUrl.pathname.includes("/careers/search");
+    if (isIbmList) return crawlIbmApi(company, limit, onStatus);
     if ((isFujitsu && isFujitsuJobDetailUrl(listUrl)) || isNttDataDetailUrl(listUrl)) {
       const html = await fetchText(listUrl);
       const parsed = parseJobDetail(html, listUrl, company);
@@ -26,8 +35,11 @@
       if (isNttDataDynamicListUrl(listUrl)) {
         throw new Error("この求人一覧はJavaScriptで表示されます。NTTデータの /u/job.phtml?job_category_code=34 のような公開一覧URLを指定してください。");
       }
+      if (Object.values(window.JobParserConfig?.companies || {}).some((config) => config.listUrl === listUrl)) {
+        throw new Error("求人一覧から詳細リンクを取得できませんでした。サイトの表示方式やアクセス制限を確認してください。");
+      }
       const parsed = parseJobDetail(listHtml, listUrl, company);
-      return parsed.description ? [parsed] : [];
+      return parsed.title && parsed.description ? [parsed] : [];
     }
 
     const jobs = [];
@@ -36,10 +48,9 @@
       onStatus(`詳細ページを取得しています... ${jobs.length + 1}/${detailUrls.length}`);
       try {
         const html = await fetchText(detailUrl);
+        if (!html.trim()) throw new Error("求人詳細が空の応答でした。取得先サイトのアクセス制限により取得できません。");
         const job = parseJobDetail(html, detailUrl, company);
-        if (isNttDataDetailUrl(detailUrl)
-          ? job.title && job.description
-          : job.description || job.requiredSkills.length || job.preferredSkills.length) jobs.push(job);
+        if (job.title && job.description) jobs.push(job);
       } catch (error) {
         lastError = error;
         console.warn("detail fetch failed", detailUrl, error);
@@ -48,6 +59,92 @@
     if (!jobs.length && lastError) throw lastError;
     return jobs;
   };
+
+  async function crawlIbmApi(company, limit, onStatus) {
+    onStatus("IBMの日本の求人検索APIを取得しています...");
+    const response = await fetchWithProxyFallback("https://www-api.ibm.com/search/api/v2", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+        appId: "careers", scopes: ["careers2"], query: {bool: {must: [{term: {field_keyword_05: "Japan"}}]}},
+        size: Math.min(100, Math.max(50, limit * 5)), sort: [{_score: "desc"}, {pageviews: "desc"}], lang: "zz", localeSelector: {},
+        sm: {query: "", lang: "zz"}, _source: ["title", "url", "body", "language"]
+      })
+    });
+    if (!response.ok) throw new Error(`FETCH_HTTP_${response.status}: IBM求人検索API`);
+    const result = await response.json();
+    const seen = new Set();
+    return (result.hits?.hits || []).map((hit) => hit._source || {}).filter((item) => {
+      if (!item.title || !item.body?.trim() || !item.url || seen.has(item.url)) return false;
+      const url = new URL(item.url);
+      if (url.hostname !== "careers.ibm.com" || !/JobDetail/i.test(url.pathname)) return false;
+      seen.add(item.url);
+      return true;
+    }).map((item) => ({
+      company,
+      title: cleanText(item.title),
+      description: item.body.trim(),
+      // The search index has full body text, but no reliable section boundaries.
+      // Do not infer required/preferred skills or an unpublished salary.
+      requiredSkills: [], preferredSkills: [],
+      annualIncomeRaw: "", annualIncomeMin: null, annualIncomeMax: null,
+      location: "日本",
+      notes: "公式求人検索に掲載された本文です。必須・歓迎条件と詳細勤務地は求人ページで確認してください。",
+      sourceUrl: item.url, inputMethod: "crawl", crawledAt: new Date().toISOString(),
+      sourceDocument: { format: "ibm-json", fullText: item.body, data: item, sourceUrl: item.url, fetchedAt: new Date().toISOString() }
+    })).filter((job) => (!window.classifyJobDomain || window.classifyJobDomain(job) !== "non-it")
+      && (!window.isSalesJob || !window.isSalesJob(job))).slice(0, limit);
+  }
+
+  async function crawlAccentureApi(limit, onStatus) {
+    onStatus("アクセンチュアの求人検索APIを取得しています...");
+    const body = new URLSearchParams({startIndex: "0", maxResultSize: String(limit), jobKeyword: "", jobCountry: "日本",
+      jobLanguage: "ja", countrySite: "jp-ja", sortBy: "1", searchType: "vectorSearch", enableQueryBoost: "true",
+      minScore: "0.6", getFeedbackJudgmentEnabled: "true", useCleanEmbedding: "true", score: "true", totalHits: "true",
+      debugQuery: "false", jobFilters: "[]"});
+    const response = await fetchWithProxyFallback("https://www.accenture.com/api/accenture/elastic/findjobs", {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: body.toString()
+    });
+    if (!response.ok) throw new Error(`FETCH_HTTP_${response.status}: アクセンチュア求人検索API`);
+    const result = await response.json();
+    return (result.data || []).slice(0, limit).map(parseAccentureRecord).filter((job) => job.sourceUrl && job.title && job.description);
+  }
+
+  function parseAccentureRecord(item) {
+      const qualification = item.qualificationClean || "";
+      const marker = qualification.search(/◆望ましい|◆歓迎|【歓迎/);
+      const requiredRaw = marker >= 0 ? qualification.slice(0, marker) : qualification;
+      const preferredRaw = marker >= 0 ? qualification.slice(marker) : "";
+      return {
+        company: "アクセンチュア株式会社", title: item.title || "", description: item.jobDescriptionClean || "",
+        requiredSkills: extractSkills(requiredRaw), preferredSkills: extractSkills(preferredRaw),
+        requiredCertifications: requiredRaw, preferredCertifications: preferredRaw,
+        location: (item.location || []).join(" / "), annualIncomeRaw: "", annualIncomeMin: null, annualIncomeMax: null,
+        sourceUrl: item.jobDetailUrl?.replace("{0}", "jp-ja"), inputMethod: "crawl", crawledAt: new Date().toISOString(),
+        sourceDocument: { format: "accenture-json", data: item, fullText: [item.title, "業務内容", item.jobDescriptionClean, "【必須条件】", requiredRaw, "【歓迎要件】", preferredRaw, "【勤務地】", (item.location || []).join(" / ")].filter(Boolean).join("\n"),
+          sourceUrl: item.jobDetailUrl?.replace("{0}", "jp-ja"), fetchedAt: new Date().toISOString() }
+      };
+  }
+
+  async function crawlToyotaList(listUrl, company, limit, onStatus, titleFilter = null) {
+    const doc = new DOMParser().parseFromString(await fetchText(listUrl), "text/html");
+    const links = [...doc.querySelectorAll("a[id*='lkb_Title']")].filter((link) => !titleFilter || titleFilter(cleanText(link.textContent))).slice(0, limit);
+    const jobs = [];
+    for (const [index, link] of links.entries()) {
+      onStatus(`トヨタ自動車の詳細を取得しています... ${index + 1}/${links.length}`);
+      const target = link.getAttribute("href")?.match(/__doPostBack\('([^']+)'/)?.[1];
+      if (!target) continue;
+      const body = new URLSearchParams();
+      doc.querySelectorAll("input[type=hidden][name]").forEach((input) => body.set(input.name, input.value));
+      body.set("__EVENTTARGET", target); body.set("__EVENTARGUMENT", "");
+      const response = await fetchWithProxyFallback(listUrl, {method: "POST", headers: {"Content-Type": "application/x-www-form-urlencoded"}, body: body.toString()});
+      if (!response.ok) throw new Error(`FETCH_HTTP_${response.status}: トヨタ自動車求人詳細`);
+      const sourceUrl = response.headers.get("X-Upstream-URL") || response.url;
+      if (!/\/detail.aspx/i.test(sourceUrl)) throw new Error("トヨタ自動車の求人詳細へ遷移できませんでした。");
+      const job = parseJobDetail(await decodeHtmlResponse(response), sourceUrl, company);
+      job.title = cleanText(link.textContent);
+      if (job.description) jobs.push(job);
+    }
+    return jobs;
+  }
 
   async function fetchText(url) {
     try {
@@ -72,6 +169,37 @@
     }
   }
 
+  window.getJobSourceCatalog = async function getJobSourceCatalog(listUrl) {
+    const url = new URL(listUrl);
+    if (isFujitsuJobsUrl(listUrl)) {
+      const jobs = [];
+      for (let page = 0; ; page++) {
+        const result = await fetchFujitsuSearchPage(url, page, "ja_JP");
+        const items = (result.jobSearchResult || []).map((item) => item.response || item);
+        jobs.push(...items.map((job) => ({ title: job.unifiedStandardTitle || job.title, url: buildFujitsuJobUrl(url.origin, job, "ja_JP") })));
+        if (!items.length || jobs.length >= Number(result.totalJobs)) break;
+        if (page >= 100) throw new Error("求人一覧のページ数が想定を超えました。");
+      }
+      return jobs;
+    }
+    const listUrls = isNttDataUrl(listUrl)
+      ? [url.origin + "/u/job.phtml", ...Array.from({ length: 19 }, (_, i) => url.origin + "/u/job.phtml?job_category_code=" + (34 + i))]
+      : [listUrl];
+    const jobs = [];
+    for (const pageUrl of listUrls) {
+      const html = await fetchText(pageUrl);
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const allowed = new Set(extractJobLinks(html, pageUrl));
+      for (const anchor of doc.querySelectorAll("a[href]")) {
+        const href = new URL(anchor.getAttribute("href"), pageUrl).href;
+        if (allowed.has(href)) jobs.push({ title: cleanText(anchor.querySelector(".jobName, .jobBox")?.textContent || anchor.textContent), url: href });
+      }
+    }
+    return jobs;
+  };
+
+  window.crawlToyotaSelectedJobs = (listUrl, company, titleFilter) => crawlToyotaList(listUrl, company, 1000, () => {}, titleFilter);
+
   async function decodeHtmlResponse(response) {
     const bytes = await response.arrayBuffer();
     const contentType = response.headers.get("Content-Type") || "";
@@ -79,7 +207,8 @@
     // HTML may declare its encoding only in a meta tag. The declaration is ASCII.
     const prefix = new TextDecoder("utf-8").decode(bytes.slice(0, 4096));
     const metaCharset = prefix.match(/<meta\b[^>]*charset\s*=\s*["']?([^\s;"'/>]+)/i)?.[1];
-    return new TextDecoder(headerCharset || metaCharset || "utf-8").decode(bytes);
+    const charset = headerCharset || metaCharset || "utf-8";
+    return new TextDecoder(/^(cp51932|eucjp)$/i.test(charset) ? "euc-jp" : charset).decode(bytes);
   }
 
   async function readErrorResponseText(response) {
@@ -103,11 +232,16 @@
       })
       .filter((href) => {
         if (!href || !/^https?:/i.test(href)) return false;
-        if (isNttDataUrl(baseUrl)) {
-          const url = new URL(href);
-          return url.hostname === new URL(baseUrl).hostname &&
-            url.pathname === "/u/job.phtml" && url.searchParams.has("job_code");
+        const base = new URL(baseUrl);
+        const url = new URL(href);
+        if (isNttDataUrl(baseUrl) || /^(jobs.nec-careers.com|progres07.jposting.net|js03.jposting.net)$/.test(base.hostname)) {
+          return url.hostname === base.hostname &&
+            url.pathname.endsWith("/u/job.phtml") && url.searchParams.has("job_code");
         }
+        if (base.hostname === "toyota-career.snar.jp") return url.hostname === base.hostname && /jobboard\/detail.aspx$/i.test(url.pathname);
+        if (base.hostname === "www.ibm.com") return url.hostname === "careers.ibm.com" && /JobDetail/i.test(url.pathname);
+        if (base.hostname === "www.accenture.com") return url.hostname === base.hostname && /\/careers\/jobdetails/i.test(url.pathname);
+        if (base.hostname === "jsd.jposting.net") return url.hostname === base.hostname && /\/toyotasystems\/.*(?:job|detail)/i.test(url.pathname);
         return /job|career|recruit|posting|detail|id=|no=/i.test(href);
       });
     return [...new Set(links)].filter((href) => href !== baseUrl);
@@ -207,9 +341,63 @@
 
   function parseJobDetail(html, sourceUrl, company) {
     const doc = new DOMParser().parseFromString(html, "text/html");
-    const bodyText = doc.body?.innerText || doc.body?.textContent || "";
+    doc.querySelectorAll("script:not([type='application/ld+json']), style, nav, footer").forEach((node) => node.remove());
+    const fullText = normalizeLines(htmlText(doc.body));
+    const parsed = parseJobFields(html, sourceUrl, company);
+    return { ...parsed, sourceDocument: { format: "html", fullText, html: doc.body?.innerHTML || "", sourceUrl, fetchedAt: new Date().toISOString() } };
+  }
+
+  window.reparseJobDocument = function reparseJobDocument(job) {
+    const source = job.sourceDocument;
+    if (!source?.fullText) throw new Error("求人全文が保存されていません。公式サイトから再取得してください。");
+    let parsed;
+    if (source.format === "html") parsed = parseJobFields(source.html, source.sourceUrl || job.sourceUrl, job.company);
+    else if (source.format === "accenture-json") parsed = parseAccentureRecord(source.data);
+    else if (source.format === "ibm-json") {
+      parsed = { ...job, description: source.fullText, requiredSkills: [], preferredSkills: [], requiredCertifications: "", preferredCertifications: "" };
+    } else parsed = window.parseManualJobText(source.fullText, job.company, { forceCompany: true });
+    return { ...parsed, id: job.id, sourceUrl: job.sourceUrl, inputMethod: job.inputMethod, crawledAt: job.crawledAt, sourceDocument: source };
+  };
+
+  window.compactJobSourceDocument = function compactJobSourceDocument(job) {
+    const source = job.sourceDocument;
+    if (source?.format !== "html") return job;
+    const doc = new DOMParser().parseFromString(source.html, "text/html");
+    const content = doc.querySelector("[itemtype$='/JobPosting'], #system.desc");
+    if (!content) return job;
+    return { ...job, sourceDocument: { ...source, html: content.outerHTML, fullText: normalizeLines(htmlText(content)) } };
+  };
+
+  function parseJobFields(html, sourceUrl, company) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    doc.querySelectorAll("script:not([type='application/ld+json']), style, nav, footer").forEach((node) => node.remove());
+    // Detached documents do not have rendered innerText. Preserve block and br boundaries.
+    const bodyText = normalizeLines(htmlText(doc.body));
+    if (/verify that you're not a robot|JavaScript is disabled|Enable JavaScript|Access Denied/i.test(bodyText)) {
+      throw new Error("求人詳細にアクセス制限があります。求人票の直接入力を利用してください。");
+    }
     if (isNttDataDetailUrl(sourceUrl)) {
       return parseNttDataJobDetail(doc, bodyText, sourceUrl, company);
+    }
+    if (window.parseManualJobText) {
+      const sections = readLabeledSections(doc);
+      let parsed = window.parseManualJobText(bodyText, company, { forceCompany: true });
+      if (!parsed.description && Object.keys(sections).length) {
+        const tableParsed = window.parseManualJobText(Object.entries(sections).map(([label, value]) => `${label}\n${value}`).join("\n"), company, { forceCompany: true });
+        if (tableParsed.description) parsed = tableParsed;
+      }
+      if (!parsed.description) parsed.description = firstSection(sections, ["職務内容", "仕事内容", "業務内容", "Job duties"]);
+      if (!parsed.description) parsed.description = sectionAfterLabel(bodyText, ["職務内容", "仕事内容", "業務内容"], ["必須", "歓迎", "給与", "待遇", "勤務地", "応募資格"]);
+      const stored = window.getRequirementRaw?.(parsed);
+      if (stored && !stored.required && !stored.preferred) {
+        const required = firstSection(sections, ["必要条件", "必須条件", "登録資格", "応募資格", "Qualifications"]);
+        const preferred = firstSection(sections, ["歓迎条件", "歓迎資格"]);
+        if (required || preferred) parsed.referenceInfo = window.buildRequirementReference(parsed.referenceInfo, required, preferred);
+      }
+      const title = cleanText(doc.querySelector("[itemprop='title'], .jobnames, .jobTitle, #system table caption")?.textContent) || [...doc.querySelectorAll("h4, h1, h2")]
+        .map((node) => cleanText(node.textContent)).find((value) => value && !/^(Entry|職種詳細|求人内容|募集職種詳細)/i.test(value));
+      return { ...parsed, title: title || parsed.title,
+        sourceUrl, inputMethod: "crawl" };
     }
     if (isAccentureCareersUrl(sourceUrl) || /アクセンチュア株式会社|アクセンチュア/.test(bodyText)) {
       return parseAccentureJobDetail(bodyText, sourceUrl, company);
@@ -256,8 +444,8 @@
     const description = firstSection(sections, ["職務内容", "仕事内容"]);
     const incomeRaw = firstSection(sections, ["待遇", "想定年収", "給与"]);
     const income = parseIncome(incomeRaw);
-    const requiredRaw = firstSection(sections, ["必要条件", "必須条件"]);
-    const preferredRaw = firstSection(sections, ["歓迎条件"]);
+    const requiredRaw = firstSection(sections, ["【必要条件】求める経験・スキル・知識", "必要条件】求める経験・スキル・知識", "必須条件"]);
+    const preferredRaw = firstSection(sections, ["【歓迎条件】求める経験・スキル・知識", "歓迎条件】求める経験・スキル・知識"]);
     const location = firstSection(sections, ["勤務地"]);
     return {
       company,
@@ -266,8 +454,15 @@
       annualIncomeRaw: incomeRaw,
       annualIncomeMin: income.min,
       annualIncomeMax: income.max,
-      requiredSkills: extractSkills(requiredRaw || description),
+      requiredSkills: window.extractSkillsFromText ? window.extractSkillsFromText(requiredRaw) : extractSkills(requiredRaw),
       preferredSkills: extractSkills(preferredRaw),
+      referenceInfo: window.buildRequirementReference ? window.buildRequirementReference("", requiredRaw + "\n" + firstSection(sections, ["【必要条件】資格", "必要条件】資格"]), preferredRaw + "\n" + firstSection(sections, ["【歓迎条件】資格", "歓迎条件】資格"])) : "",
+      requiredCertifications: firstSection(sections, ["【必要条件】資格", "必要条件】資格"]),
+      preferredCertifications: firstSection(sections, ["【歓迎条件】資格", "歓迎条件】資格"]),
+      requiredLanguage: firstSection(sections, ["【必要条件】他言語力"]),
+      preferredLanguage: firstSection(sections, ["【歓迎条件】他言語力"]),
+      appealPoints: firstSection(sections, ["アピールポイント"]),
+      referenceInfo: firstSection(sections, ["参考情報"]),
       notes: location ? `勤務地: ${location}` : "",
       location,
       sourceUrl,
@@ -531,6 +726,14 @@
 
   function readLabeledSections(doc) {
     const sections = {};
+    doc.querySelectorAll("dt").forEach((labelNode) => {
+      const values = [];
+      for (let node = labelNode.nextElementSibling; node && node.tagName !== "DT"; node = node.nextElementSibling) {
+        values.push(htmlText(node));
+      }
+      const label = cleanText(labelNode.textContent);
+      if (label) sections[label] = normalizeLines(values.join("\n"));
+    });
     const rows = doc.querySelectorAll("tr, dl, .item, .section, section");
     rows.forEach((row) => {
       // jposting uses two td cells rather than th/td for its label/value rows.
@@ -538,22 +741,36 @@
         const cells = [...row.children].filter((cell) => /^(TH|TD)$/.test(cell.tagName));
         if (cells.length === 2 && !cells.some((cell) => cell.querySelector("table"))) {
           const label = cleanText(cells[0].textContent);
-          const value = cleanText(cells[1].textContent);
+          const value = normalizeLines(htmlText(cells[1]));
           if (label && value && label.length <= 40) sections[label] = value;
           return;
         }
         if (row.querySelector("table")) return;
       }
+      if (row.tagName === "DL") return;
       const label = cleanText(row.querySelector("th, dt, h2, h3, .label, .ttl, .title")?.textContent || "");
-      const value = cleanText(row.querySelector("td, dd, p, .content, .txt, .detail")?.textContent || "");
+      const value = normalizeLines(htmlText(row.querySelector("td, dd, .content, .txt, .detail") || row));
       if (label && value && label.length <= 40) sections[label] = value;
     });
     return sections;
   }
 
   function firstSection(sections, labels) {
+    for (const target of labels) {
+      if (sections[target]) return sections[target];
+    }
     const found = Object.entries(sections).find(([label]) => labels.some((target) => label.includes(target)));
     return found ? found[1] : "";
+  }
+
+  function htmlText(node) {
+    if (!node) return "";
+    if (node.nodeType === 3) return node.textContent;
+    if (node.nodeType !== 1) return "";
+    if (node.tagName === "BR") return "\n";
+    const text = [...node.childNodes].map(htmlText).join("");
+    return /^(P|DIV|LI|TR|TD|TH|DT|DD|H[1-6]|SECTION|ARTICLE|UL|OL|TABLE)$/.test(node.tagName)
+      ? `\n${text}\n` : text;
   }
 
   function findIncomeText(text) {
@@ -575,15 +792,20 @@
 
   function extractSkills(raw) {
     if (!raw) return [];
+    if (window.extractSkillsFromText) return window.extractSkillsFromText(raw);
     const dictionary = [...new Set([...knownSkills, ...(window.JobParserConfig?.skillDictionary || [])])];
-    const found = dictionary.filter((skill) => new RegExp(escapeRegExp(skill), "i").test(raw));
+    const found = dictionary.filter((skill) => {
+      const term = escapeRegExp(skill);
+      const pattern = /^[A-Za-z0-9]/.test(skill) ? `(?<![A-Za-z0-9])${term}(?![A-Za-z0-9])` : term;
+      return new RegExp(pattern, "i").test(raw);
+    });
     const bulletItems = raw
       .split(/\n|・|●|■|,|、|;/)
       .map((item) => cleanText(item).replace(/^[\-\u30fb\s]+/, ""))
       .filter((item) => item.length >= 2 && item.length <= 28)
       .filter((item) => !isSentenceLikeSkill(item))
       .filter((item) => !/(必須|歓迎|条件|経験|以上|以下|年収|勤務地|勤務)/.test(item));
-    return [...new Set([...found, ...bulletItems].map(normalizeSkill).filter(Boolean))].slice(0, 18);
+    return [...new Set([...found, ...bulletItems].map(normalizeSkill).filter(Boolean))];
   }
 
   function isSentenceLikeSkill(item) {

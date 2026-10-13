@@ -2,8 +2,58 @@
 
 window.JobParserConfig = {
   defaultCompany: "株式会社NTTデータ",
+  skillAliases: {
+    "AWS": ["Amazon Web Services", "アマゾンウェブサービス"],
+    "Azure": ["Microsoft Azure"], "GCP": ["Google Cloud", "Google Cloud Platform"],
+    "Kubernetes": ["K8s"], "JavaScript": ["JS"], "TypeScript": ["TS"],
+    "PoC": ["POC"], "Db2": ["DB2"],
+    "Node.js": ["NodeJS", "Node JS"], "Vue": ["Vue.js", "VueJS"], "React": ["React.js", "ReactJS"],
+    "PostgreSQL": ["Postgres"], "Microsoft365": ["Microsoft 365", "Office365", "Office 365", "M365"],
+    "C言語": ["C", "C language"], "C#": ["C♯", "C Sharp"],
+    "OSS": ["オープンソースソフトウェア", "open source software"],
+    "DX": ["デジタルトランスフォーメーション", "デジタル変革"],
+    "アジャイル": ["アジャイル開発", "Agile"], "スクラム": ["Scrum"],
+    "BPR": ["BPR業務変革", "BPR業務改革", "業務改革"], "ITコンサル": ["ITコンサルティング"],
+    "プロジェクトマネジメント": ["PM", "プロジェクトマネージャー", "プロジェクトマネージャ", "Project management"],
+    "チームマネジメント": ["チームリーダー", "プロジェクトリーダー", "PL"],
+    "リーダーシップ": ["リーダシップ", "Leadership"], "課題解決": ["課題解決能力"],
+    "ロジカルシンキング": ["ロジカルシンキング能力"], "仮想基盤": ["仮想化基盤"],
+    "組み込み": ["組込み", "組込", "組み込みシステム"], "システム開発": ["ITシステム開発"],
+    "機械学習": ["Machine Learning"], "生成AI": ["Generative AI"], "サーバ": ["サーバー"],
+    "要件定義": ["業務要件定義", "システム要件定義"], "データ分析": ["データ解析", "Data analysis", "データアナリティクス"]
+  },
+  // Public employee salary aggregates, checked on 2026-10-12. Amounts are 万円.
+  // These benchmarks are estimates for missing salary only, never advertised pay.
+  incomeBenchmarks: {
+    "株式会社野村総合研究所": {
+      sourceUrl: "https://openmoney.jp/corporations/17/salaries", sourceName: "OpenMoney", updatedAt: "2026-10-09", checkedAt: "2026-10-12",
+      overall: { mean: 1069, count: 1407 },
+      roles: { engineer: { mean: 967, count: 622 }, consultant: { mean: 1129, count: 377 }, manager: { mean: 1235, count: 138 }, data: { mean: 1035, count: 14 } }
+    },
+    "アクセンチュア株式会社": {
+      sourceUrl: "https://openmoney.jp/corporations/10/salaries", sourceName: "OpenMoney", updatedAt: "2026-10-09", checkedAt: "2026-10-12",
+      overall: { mean: 932, count: 4560 },
+      roles: { engineer: { mean: 740, count: 718 }, consultant: { mean: 977, count: 3035 }, manager: { mean: 1094, count: 78 }, data: { mean: 972, count: 108 }, corporate: { mean: 914, count: 78 } }
+    },
+    "日本アイ・ビー・エム株式会社": {
+      sourceUrl: "https://openmoney.jp/corporations/93/salaries", sourceName: "OpenMoney", updatedAt: "2026-10-09", checkedAt: "2026-10-12",
+      overall: { mean: 942, count: 1049 },
+      roles: { engineer: { mean: 844, count: 271 }, consultant: { mean: 930, count: 473 }, manager: { mean: 1166, count: 50 }, data: { mean: 932, count: 23 }, corporate: { mean: 969, count: 15 }, research: { mean: 1150, count: 5 } }
+    },
+    "富士通株式会社": {
+      sourceUrl: "https://openmoney.jp/corporations/128/salaries", sourceName: "OpenMoney", updatedAt: "2026-10-07", checkedAt: "2026-10-12",
+      overall: { mean: 787, count: 1532 },
+      roles: { engineer: { mean: 719, count: 670 }, consultant: { mean: 906, count: 59 }, manager: { mean: 959, count: 68 }, data: { mean: 971, count: 7 }, research: { mean: 879, count: 58 } }
+    },
+    "株式会社NTTデータ": {
+      sourceUrl: "https://openmoney.jp/corporations/111/salaries", sourceName: "OpenMoney", updatedAt: "2026-10-09", checkedAt: "2026-10-12",
+      overall: { mean: 801, count: 1587 },
+      roles: { engineer: { mean: 757, count: 687 }, consultant: { mean: 837, count: 125 }, manager: { mean: 918, count: 205 }, data: { mean: 809, count: 32 } }
+    }
+  },
   companies: {
     "株式会社NTTデータ": {
+      listUrl: "https://nttdata-career.jposting.net/u/job.phtml?job_category_code=34",
       aliases: ["NTT DATA", "NTT DATA GROUP", "NTTデータ株式会社", "NTTデータ", "NTTデータグループ", "株式会社NTTデータグループ", "NTTData", "NTT Data"],
       titlePattern: "^【.+?】",
       titleMatchIndex: 1,
@@ -32,6 +82,7 @@ window.JobParserConfig = {
       ]
     },
     "富士通株式会社": {
+      listUrl: "https://www.jobs.global.fujitsu.com/?locale=ja_JP",
       aliases: ["富士通 株式会社", "富士通Japan株式会社", "富士通JAPAN株式会社", "富士通Japan 株式会社", "Fujitsu Japan", "FUJITSU LIMITED", "Fujitsu"],
       titlePattern: ".+",
       titleMatchIndex: 0,
@@ -66,6 +117,7 @@ window.JobParserConfig = {
       ]
     },
     "日本アイ・ビー・エム株式会社": {
+      listUrl: "https://www.ibm.com/jp-ja/careers/search",
       aliases: ["日本IBM", "日本 IBM", "日本アイビーエム", "IBM Japan", "IBM", "IBM Japan Digital Services", "IJDS", "日本アイ・ビー・エムデジタルサービス"],
       titlePattern: ".+",
       titleMatchIndex: 0,
@@ -123,6 +175,7 @@ window.JobParserConfig = {
       ]
     },
     "トヨタ自動車株式会社": {
+      listUrl: "https://toyota-career.snar.jp/index.aspx",
       aliases: ["トヨタ自動車", "TOYOTA MOTOR CORPORATION", "Toyota Motor Corporation", "Toyota"],
       titlePattern: ".+",
       titleMatchIndex: 0,
@@ -156,6 +209,7 @@ window.JobParserConfig = {
       ]
     },
     "株式会社トヨタシステムズ": {
+      listUrl: "https://js03.jposting.net/toyotasystems/u/job.phtml",
       aliases: ["トヨタシステムズ", "株式会社 トヨタシステムズ"],
       titlePattern: ".+",
       titleMatchIndex: 0,
@@ -182,6 +236,7 @@ window.JobParserConfig = {
       ]
     },
     "NEC": {
+      listUrl: "https://jobs.nec-careers.com/u/job.phtml",
       aliases: ["日本電気株式会社", "NEC Corporation", "日本電気"],
       titlePattern: "^\\d+\\s+.+",
       titleMatchIndex: 0,
@@ -213,6 +268,7 @@ window.JobParserConfig = {
       ]
     },
     "アクセンチュア株式会社": {
+      listUrl: "https://www.accenture.com/jp-ja/careers/jobsearch",
       aliases: ["アクセンチュア", "Accenture", "Accenture Japan"],
       titlePattern: ".+",
       titleMatchIndex: 0,
@@ -242,6 +298,7 @@ window.JobParserConfig = {
       ]
     },
     "株式会社野村総合研究所": {
+      listUrl: "https://progres07.jposting.net/pgnri/u/job.phtml",
       aliases: ["野村総合研究所", "NRI", "Nomura Research Institute"],
       titlePattern: ".+",
       titleMatchIndex: 0,
@@ -272,6 +329,7 @@ window.JobParserConfig = {
     }
   },
   skillDictionary: [
+    "ServiceNow", "Salesforce", "CRM", "SaaS", "PoC", "GitHub", "Flutter", "Android", "iOS", "OCI", "GPU", "IaC", "Cisco", "Windows", "SOC", "EDR", "IAM", "SASE", "TCP/IP", "VPN", "DNS", "CAD", "ABAP", "Jira", "Confluence", "Slack", "Teams", "Copilot", "Qiskit", "Excel", "PowerPoint", "Word",
     "JavaScript", "TypeScript", "Python", "Java", "Webアプリケーション", "オープン系システム", "Salesforce", "CRM", "RPA", "JLPT N1", "日本語", "C#", "C++", "Go", "Ruby", "PHP",
     "SQL", "AWS", "Azure", "GCP", "Docker", "Kubernetes", "React", "Vue", "Angular",
     "Spring", "Linux", "Git", "SCM", "ERP", "SAP", "SAP S/4HANA", "Oracle Cloud SCM",
@@ -371,9 +429,10 @@ window.JobParserConfig = {
     "官公庁", "公共", "社会保障", "顧客課題", "顧客ニーズ", "クラウドネイティブ"
   ],
   certificationDictionary: [
+    "GIAC", "TOEIC", "JLPT N1", "JLPT N2", "JLPT N3", "JLPT N4", "JLPT N5",
     "PMP", "プロジェクトマネージャ", "システムアーキテクト", "データベーススペシャリスト",
-    "ネットワークスペシャリスト", "情報処理安全確保支援士", "ASCM", "CPIM", "CSCP", "CLTD",
-    "SAP S/4HANA", "Oracle Cloud SCM", "Kinaxis Maestro", "Anaplan", "mcframe",
+    "ネットワークスペシャリスト", "情報処理安全確保支援士", "CPIM", "CSCP", "CLTD",
+    "SAP認定資格", "認定スクラムマスター", "応用情報処理技術者",
     "ITパスポート", "情報セキュリティマネジメント",
     "応用情報技術者", "基本情報技術者", "AWS Certified Solutions Architect",
     "AWS Certified Developer", "AWS Certified SysOps Administrator",

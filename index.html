@@ -19,15 +19,20 @@
       <div class="header-actions">
         <button class="settings-button" data-view="settings" type="button">設定</button>
         <nav class="tabs" aria-label="ページ切り替え">
-          <button class="tab is-active" data-view="dashboard">解析情報</button>
-          <button class="tab" data-view="crawler">クローリング</button>
-          <button class="tab" data-view="manual">直接入力</button>
+          <button class="tab is-active" data-view="dashboard">求人一覧</button>
+          <button class="tab" data-view="crawler">求人を取得</button>
+          <button class="tab" data-view="manual">求人を追加</button>
         </nav>
       </div>
     </header>
 
     <main>
       <section id="dashboard" class="view is-active">
+        <div class="page-intro">
+          <div><p class="eyebrow">JOB EXPLORER</p><h2>求人を、条件で見渡す。</h2>
+          <p>スキル・資格・年収・地域から、気になる仕事を探す。</p></div>
+          <button id="toggleFilterButton" class="ghost-button" type="button" aria-expanded="false" aria-controls="explorerFilters">絞り込み条件</button>
+        </div>
         <div class="metric-grid">
           <article class="metric">
             <span>求人件数</span>
@@ -37,21 +42,27 @@
             <span>企業数</span>
             <strong id="companyCount">0</strong>
           </article>
-          <article class="metric representative-companies">
+          <article class="metric representative-companies" hidden>
             <span>代表企業</span>
             <div id="representativeCompanies" class="representative-list">-</div>
           </article>
+          <article class="metric"><span>勤務地の地域数</span><strong id="regionCount">0</strong></article>
           <article class="metric">
-            <span>平均年収</span>
+            <span id="avgIncomeLabel">平均年収</span>
             <strong id="avgIncome">-</strong>
           </article>
         </div>
 
         <div class="dashboard-layout">
-          <div class="insight-column">
+          <div id="explorerFilters" class="insight-column">
+            <div class="filter-heading"><h2>条件で絞り込む</h2><button id="resetAllFilters" class="ghost-button compact-button" type="button">すべて解除</button></div>
+            <section class="panel compact-panel">
+              <label class="region-label" for="regionFilter">勤務地・地域</label>
+              <select id="regionFilter"><option value="">すべての地域</option></select>
+            </section>
             <section class="panel compact-panel">
               <div class="panel-head">
-                <h2>年収フィルタ</h2>
+                <h2>年収</h2>
                 <button id="resetIncomeFilter" class="ghost-button compact-button" type="button" hidden>年収条件リセット</button>
               </div>
               <div class="income-filter" aria-label="年収フィルタ">
@@ -67,12 +78,13 @@
                   <span id="incomeFilterMinLabel">0万円</span>
                   <span id="incomeFilterMaxLabel">3000万円</span>
                 </div>
+                <p class="income-estimate-hint">未取得分は社員情報からの推定年収を含みます。</p>
               </div>
             </section>
 
             <section class="panel">
               <div class="panel-head">
-                <h2>必須スキル傾向</h2>
+                <h2>スキル</h2>
                 <div class="panel-actions">
                   <button id="resetSkillFilters" class="ghost-button compact-button" type="button" hidden>スキル条件リセット</button>
                   <select id="skillTypeFilter" aria-label="スキル種別">
@@ -86,7 +98,7 @@
 
             <section class="panel compact-panel">
               <div class="panel-head">
-                <h2>資格傾向</h2>
+                <h2>資格</h2>
                 <button id="resetCertificationFilters" class="ghost-button compact-button" type="button" hidden>資格条件リセット</button>
               </div>
               <div id="certificationChart" class="skill-chart certification-cloud empty">データがありません</div>
@@ -94,16 +106,16 @@
 
             <section class="panel compact-panel">
               <div class="panel-head">
-                <h2>企業一覧</h2>
+                <h2>企業</h2>
                 <button id="resetCompanyFilters" class="ghost-button compact-button" type="button" hidden>企業条件リセット</button>
               </div>
               <div id="companyChart" class="skill-chart company-cloud empty">データがありません</div>
             </section>
           </div>
 
-          <section class="panel">
+          <section class="panel results-panel">
             <div class="panel-head">
-              <h2>求人一覧</h2>
+              <h2>求人一覧 <span id="resultCount" class="result-count" aria-live="polite">0件</span></h2>
               <div class="job-list-tools">
                 <div class="sort-menu">
                   <button id="sortMenuButton" class="icon-button" type="button" aria-label="ソート条件" aria-expanded="false">⇅</button>
@@ -119,10 +131,12 @@
                   </div>
                 </div>
                 <div class="search-box">
-                  <input id="searchInput" type="search" placeholder="企業名・業務内容・スキルで検索">
+                  <input id="searchInput" type="search" aria-label="求人を検索" placeholder="職種・企業・スキルを検索">
                 </div>
               </div>
             </div>
+            <div id="activeFilters" class="active-filters" aria-label="選択中の条件" hidden></div>
+            <div class="job-table-head" aria-hidden="true"><span>職種 / 企業</span><span>年収</span><span>勤務地</span><span>必須スキル</span><span>資格</span></div>
             <div id="jobList" class="job-list empty">まだ求人情報が保存されていません</div>
           </section>
         </div>
@@ -135,21 +149,17 @@
           </div>
 
           <form id="crawlForm" class="crawl-form">
-            <label>
-              求人一覧URL
-              <input id="crawlUrl" type="url" value="https://nttdata-career.jposting.net/u/job.phtml?job_category_code=34" placeholder="https://example.com/joblist" required>
-            </label>
             <div class="form-row">
               <label>
-                企業名選択
+                企業名
                 <select id="crawlCompanySelect">
                   <option value="株式会社NTTデータ">株式会社NTTデータ</option>
                   <option value="NEC">NEC</option>
                   <option value="custom">直接入力</option>
                 </select>
               </label>
-              <label>
-                企業名
+              <label hidden>
+                企業名を直接入力
                 <input id="companyName" type="text" value="株式会社NTTデータ" required>
               </label>
               <label>
@@ -157,11 +167,15 @@
                 <input id="crawlLimit" type="number" min="1" max="50" value="10">
               </label>
             </div>
+            <label>
+              求人一覧URL（企業選択で自動入力）
+              <input id="crawlUrl" type="url" value="https://nttdata-career.jposting.net/u/job.phtml?job_category_code=34" placeholder="https://example.com/joblist" required>
+            </label>
             <button class="primary-button" type="submit">クロール開始</button>
           </form>
 
-          <div id="crawlStatus" class="status">URLを入力してクロールを開始してください。</div>
-          <p class="helper-text">初期URLはNTTデータの公開求人一覧です。外部サイトがブラウザからの取得を拒否する場合はCloudflare Pages上のプロキシを使います。ローカルで開く場合は求人票の直接入力も利用できます。</p>
+          <div id="crawlStatus" class="status" aria-live="polite">企業を選択してクロール開始をクリックしてください。</div>
+          <p class="helper-text">企業の公式求人一覧URLを自動入力します。別の一覧や個別求人を取得する場合はURLを変更できます。同じ内容は追加せず、変更された求人は更新します。</p>
         </section>
 
         <section class="panel">
@@ -209,52 +223,57 @@
       </section>
 
       <section id="settings" class="view">
-        <section class="panel crawler-panel">
-          <div class="panel-head">
-            <h2>辞書設定</h2>
-            <button id="resetDictionaryButton" class="ghost-button" type="button">初期値に戻す</button>
+        <div class="settings-heading"><div><p class="eyebrow">SETTINGS</p><h1>データと辞書を管理</h1><p>抽出する言葉を整えて、求人を比較しやすく。</p></div><div id="settingsOverview" class="settings-overview"></div></div>
+        <section class="panel settings-workspace">
+          <nav class="settings-tabs" role="tablist" aria-label="設定の項目">
+            <button id="settingsTabSkill" type="button" role="tab" data-settings-tab="skill" aria-controls="settingsPaneSkill" aria-selected="true">スキル</button>
+            <button id="settingsTabCertification" type="button" role="tab" data-settings-tab="certification" aria-controls="settingsPaneCertification" aria-selected="false">資格</button>
+            <button id="settingsTabCategory" type="button" role="tab" data-settings-tab="skill-category" aria-controls="settingsPaneCategory" aria-selected="false">カテゴリ</button>
+            <button id="settingsTabJobs" type="button" role="tab" data-settings-tab="jobs" aria-controls="settingsPaneJobs" aria-selected="false">求人管理</button>
+          </nav>
+          <div id="settingsDictionaryToolbar" class="settings-toolbar">
+            <label class="settings-search">辞書を検索<input id="dictionarySearch" type="search" placeholder="名前・別名で検索（例：K8s）"></label>
+            <label>カテゴリ<select id="dictionaryCategoryFilter"><option value="">すべて</option></select></label>
+            <label>使用状況<select id="dictionaryUsageFilter"><option value="all">すべて</option><option value="used">求人で使用中</option><option value="unused">未使用</option></select></label>
+            <label>並び順<select id="dictionarySort"><option value="usage">使用件数が多い順</option><option value="name">名前順</option></select></label>
           </div>
-
-          <form id="dictionaryForm" class="crawl-form">
-            <section class="dictionary-section" data-dictionary-type="skill">
+          <form id="dictionaryForm">
+            <section id="settingsPaneSkill" class="dictionary-section" data-dictionary-type="skill" data-settings-pane="skill" role="tabpanel" aria-labelledby="settingsTabSkill">
               <div class="dictionary-head">
-                <h3>スキル辞書 <span id="skillDictionaryCount" class="dictionary-count">0件</span></h3>
-                <button class="ghost-button compact-button" data-add-dictionary-row="skill" type="button">追加</button>
+                <div><h2>スキル辞書 <span id="skillDictionaryCount" class="dictionary-count">0件</span></h2><p>言語・製品・具体的な経験を登録。同じ意味の表記は統合します。</p></div>
+                <button class="ghost-button compact-button" data-add-dictionary-row="skill" type="button">＋ スキルを追加</button>
               </div>
               <div id="skillDictionaryEditor" class="dictionary-editor"></div>
+              <details class="alias-guide"><summary>表記を統合するルール</summary><div id="skillAliasGuide"></div><p>必須と歓迎に同じ語がある場合は必須だけを表示。求人原文は保持します。</p></details>
             </section>
-
-            <section class="dictionary-section" data-dictionary-type="skill-category">
+            <section id="settingsPaneCategory" class="dictionary-section" data-dictionary-type="skill-category" data-settings-pane="skill-category" role="tabpanel" aria-labelledby="settingsTabCategory" hidden>
               <div class="dictionary-head">
-                <h3>スキルカテゴリ</h3>
-                <button class="ghost-button compact-button" data-add-dictionary-row="skill-category" type="button">追加</button>
+                <div><h2>カテゴリと色</h2><p>スキルカードの分類・色をまとめて管理します。</p></div>
+                <button class="ghost-button compact-button" data-add-dictionary-row="skill-category" type="button">＋ カテゴリを追加</button>
               </div>
               <div id="skillCategoryEditor" class="dictionary-editor compact-dictionary-editor"></div>
             </section>
-
-            <section class="dictionary-section" data-dictionary-type="certification">
+            <section id="settingsPaneCertification" class="dictionary-section" data-dictionary-type="certification" data-settings-pane="certification" role="tabpanel" aria-labelledby="settingsTabCertification" hidden>
               <div class="dictionary-head">
-                <h3>資格辞書 <span id="certificationDictionaryCount" class="dictionary-count">0件</span></h3>
-                <button class="ghost-button compact-button" data-add-dictionary-row="certification" type="button">追加</button>
+                <div><h2>資格辞書 <span id="certificationDictionaryCount" class="dictionary-count">0件</span></h2><p>認定・試験の名称を管理。製品名や職種は資格に含めません。</p></div>
+                <button class="ghost-button compact-button" data-add-dictionary-row="certification" type="button">＋ 資格を追加</button>
               </div>
               <div id="certificationDictionaryEditor" class="dictionary-editor"></div>
             </section>
-
-            <div class="form-actions">
-              <button class="primary-button" type="submit">辞書を保存</button>
+            <div class="settings-savebar">
+              <span id="dictionaryDirtyStatus" role="status">保存済み</span>
+              <div><button id="normalizeDictionaryButton" class="ghost-button" type="button">表記・重複を整理</button><button id="resetDictionaryButton" class="ghost-button" type="button">初期値に戻す</button><button id="saveDictionaryButton" class="primary-button" type="submit">変更を保存</button></div>
             </div>
           </form>
-
-          <div id="dictionaryStatus" class="status" hidden></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head">
-            <h2>求人情報管理</h2>
-            <button id="cleanupDataButton" class="ghost-button" type="button">データ更新</button>
-          </div>
-          <div id="settingsJobStatus" class="status" hidden></div>
-          <div id="settingsJobList" class="settings-job-list empty">削除できる求人情報がありません</div>
+          <div id="dictionaryStatus" class="status" role="status" hidden></div>
+          <section id="settingsPaneJobs" data-settings-pane="jobs" role="tabpanel" aria-labelledby="settingsTabJobs" hidden>
+            <div class="dictionary-head"><div><h2>求人データ</h2><p>保存した原文から抽出し直すか、現在の項目だけを整理できます。</p></div></div>
+            <div class="settings-data-actions"><div><strong>全文から再抽出</strong><p>辞書や抽出ルールを変更した後に使用します。</p><button id="reparseDocumentsButton" class="ghost-button" type="button">保存した全文から再解析</button></div><div><strong>表記を整理</strong><p>現在のスキル・資格・年収の表記を整えます。</p><button id="cleanupDataButton" class="ghost-button" type="button">データを整理</button></div></div>
+            <div id="settingsJobStatus" class="status" role="status" hidden></div>
+            <div class="settings-toolbar"><label class="settings-search">求人を検索<input id="settingsJobSearch" type="search" placeholder="求人名・企業・スキル"></label><label>企業<select id="settingsJobCompany"><option value="">すべての企業</option></select></label></div>
+            <div class="settings-pagination"><span id="settingsJobCount"></span><div><button id="settingsJobsPrevious" class="ghost-button compact-button" type="button">前へ</button><span id="settingsJobPage"></span><button id="settingsJobsNext" class="ghost-button compact-button" type="button">次へ</button></div></div>
+            <div id="settingsJobList" class="settings-job-list empty">求人がありません</div>
+          </section>
         </section>
       </section>
     </main>
@@ -276,16 +295,14 @@
             <dd class="required"></dd>
           </div>
           <div>
-            <dt>推奨</dt>
-            <dd class="preferred"></dd>
-          </div>
-          <div>
             <dt>資格</dt>
             <dd class="certifications"></dd>
           </div>
         </dl>
         <details class="job-detail-block">
-          <summary>職務内容・補足</summary>
+          <summary><span class="detail-closed-label">詳細を確認</span><span class="detail-open-label">詳細を閉じる</span></summary>
+          <div class="job-detail-content">
+          <section><h4>歓迎スキル</h4><div class="preferred"></div></section>
           <section>
             <h4>職務内容</h4>
             <p class="description"></p>
@@ -294,6 +311,9 @@
             <h4>補足</h4>
             <p class="notes"></p>
           </section>
+          <section class="income-estimate" hidden><h4>推定年収の根拠</h4><p class="income-estimate-text"></p><a class="income-estimate-source" target="_blank" rel="noreferrer"></a></section>
+          <details class="source-document" hidden><summary>保存した求人全文</summary><p class="source-document-date"></p><pre class="source-document-text"></pre></details>
+          </div>
         </details>
         <a class="source" target="_blank" rel="noreferrer">求人ページ</a>
       </article>

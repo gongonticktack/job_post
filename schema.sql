@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS jobs (
   required_skills TEXT[] NOT NULL DEFAULT '{}',
   preferred_skills TEXT[] NOT NULL DEFAULT '{}',
   appeal_points TEXT,
+  -- Legacy reference text, or JOB_SOURCE_ARCHIVE_V1 + newline + JSON
+  -- containing referenceInfo, sourceDocument (fullText, HTML/API data, URL, fetchedAt),
+  -- and optional salaryEstimate (employee-data estimate, distinct from advertised annual_income_*).
   reference_info TEXT,
   required_language TEXT,
   required_certifications TEXT,

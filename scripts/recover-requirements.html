@@ -1,0 +1,31 @@
+<!doctype html><meta charset="utf-8"><iframe id="app" src="/index.html"></iframe>
+<script>
+(async () => {
+ const frame=document.querySelector('#app');await new Promise(r=>frame.onload=r);const w=frame.contentWindow;
+ for(let i=0;i<150&&w.document.querySelector('#crawlCompanySelect').options.length<8;i++)await new Promise(r=>setTimeout(r,20));
+ const data=await(await fetch('/snapshot')).json();
+ w.JobParserConfig.skillDictionary=[...new Set([...w.JobParserConfig.skillDictionary,...data.tables.dictionary_terms.filter(t=>t.dictionary_type==='skill').map(t=>t.term)])];
+ w.JobParserConfig.certificationDictionary=[...new Set([...w.JobParserConfig.certificationDictionary,...data.tables.dictionary_terms.filter(t=>t.dictionary_type==='certification').map(t=>t.term)])];
+ const normalize=s=>String(s||'').normalize('NFKC').replace(/<\d+>/g,'').replace(/\s+/g,'').replace(/NEW!?$/i,'').trim();
+ const indexes=new Map(); const recovered=[], failures=[];
+ const candidates=data.tables.jobs.filter(j=>j.source_url.startsWith('https://')||data.tables.companies.find(c=>c.id===j.company_id)?.name==='株式会社NTTデータ');
+ async function html(url){const r=await fetch('/api/proxy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});if(!r.ok)throw Error('HTTP '+r.status);const bytes=await r.arrayBuffer();return new TextDecoder(r.headers.get('Content-Type')?.match(/charset=([^;]+)/i)?.[1]||'utf-8').decode(bytes);}
+ const base='https://nttdata-career.jposting.net/u/job.phtml';
+ const doc=new DOMParser().parseFromString(await html(base),'text/html');
+ const lists=[...new Set([...doc.querySelectorAll('a[href]')].map(a=>new URL(a.getAttribute('href'),base).href).filter(url=>new URL(url).searchParams.has('job_category_code')).concat(Array.from({length:19},(_,i)=>base+'?job_category_code='+(34+i))))];
+ const docs=[doc];
+ for(let i=0;i<lists.length;i+=4)docs.push(...await Promise.all(lists.slice(i,i+4).map(async url=>new DOMParser().parseFromString(await html(url),'text/html'))));
+ for(const page of docs)for(const a of page.querySelectorAll('a[href]')){const url=new URL(a.getAttribute('href'),base);if(url.searchParams.has('job_code')){const key=normalize(a.textContent);if(!indexes.has(key))indexes.set(key,new Set());indexes.get(key).add(url.href);}}
+ await fetch('/progress',{method:'POST',body:'Indexed '+indexes.size+' titles'});
+ for(const job of candidates){
+  const company=data.tables.companies.find(c=>c.id===job.company_id)?.name;
+  let url=job.source_url.startsWith('https://')?job.source_url:null;
+  if(!url){const matches=indexes.get(normalize(job.title));if(matches?.size===1)url=[...matches][0];}
+  if(!url)continue;
+  try{const [parsed]=await w.crawlJobsBrowser(url,company,1);if(!parsed||normalize(parsed.title)!==normalize(job.title)){failures.push({id:job.id,reason:'title mismatch'});continue;}recovered.push({id:job.id,job:parsed});}
+  catch(e){failures.push({id:job.id,reason:e.message});}
+  if((recovered.length+failures.length)%10===0)await fetch('/progress',{method:'POST',body:String(recovered.length)});
+ }
+ await fetch('/results',{method:'POST',body:JSON.stringify({recovered,failures})});
+})();
+</script>

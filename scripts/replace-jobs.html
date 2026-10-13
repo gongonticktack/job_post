@@ -1,0 +1,53 @@
+<!doctype html><meta charset="utf-8"><iframe id="app" src="/index.html"></iframe>
+<script>
+(async () => {
+ const frame=document.querySelector('#app');await new Promise(r=>frame.onload=r);const w=frame.contentWindow;
+ for(let i=0;i<150&&w.document.querySelector('#crawlCompanySelect').options.length<8;i++)await new Promise(r=>setTimeout(r,20));
+ const snapshot=await(await fetch('/snapshot')).json();
+ for(const type of ['skill','certification']){const key=type+'Dictionary';w.JobParserConfig[key]=[...new Set([...w.JobParserConfig[key],...snapshot.tables.dictionary_terms.filter(t=>t.dictionary_type===type).map(t=>t.term)])];}
+ const affected=new URLSearchParams(location.search).has('affected');
+ const existing=affected?await(await fetch('/replacement')).json():null;
+ const companies=affected?['富士通株式会社','株式会社トヨタシステムズ','アクセンチュア株式会社']:Object.keys(w.JobParserConfig.companies);
+ const jobs=existing?existing.jobs.filter(job=>!companies.includes(job.company)):[],reports=existing?existing.reports.filter(report=>!companies.includes(report.company)):[];
+ async function progress(message){await fetch('/progress',{method:'POST',body:message});}
+ for(const company of companies){
+  const listUrl=w.JobParserConfig.companies[company]?.listUrl;
+  const report={company,catalogCount:0,accepted:0,excluded:0,failed:[],complete:false};reports.push(report);
+  if(!listUrl){report.failed.push({error:'求人一覧URLなし'});continue;}
+  await progress(company+': 募集中求人を取得');
+  function accept(job){
+   if(job)job.company=company;
+   if(!job?.title||!job.description||!job.sourceDocument?.fullText){report.failed.push({url:job?.sourceUrl,error:'職種・業務内容・全文のいずれかが未取得'});return;}
+   if(w.isSalesJob(job)||w.classifyJobDomain(job)!=='it'){report.excluded++;return;}
+   const repaired=w.normalizeClientJob(w.repairJobRequirements(job));jobs.push(repaired);report.accepted++;
+  }
+  try{
+   if(/accenture.com|www.ibm.com|toyota-career.snar.jp/.test(listUrl)){
+    const current=await w.crawlJobsBrowser(listUrl,company,1000,message=>{if(message.includes('10/')||message.includes('50/'))progress(message);});
+    report.catalogCount=current.length;current.forEach(accept);report.complete=true;
+   }else{
+    const catalog=await w.getJobSourceCatalog(listUrl);
+    const seen=new Set();const sources=catalog.filter(item=>{if(seen.has(item.url))return false;seen.add(item.url);return true;});
+    report.catalogCount=sources.length;
+    for(let offset=0;offset<sources.length;offset+=3){
+     await Promise.all(sources.slice(offset,offset+3).map(async item=>{
+      if(w.isSalesJob(item)||w.classifyJobDomain(item)==='non-it'){report.excluded++;return;}
+      try{
+       const result=await w.crawlJobsBrowser(item.url,company,1);const job=result[0];
+       if(!job){report.failed.push({url:item.url,title:item.title,error:'求人内容を抽出できません'});return;}
+       // The official catalog supplies the role title; the detail page can have a department heading.
+       job.title=String(item.title||job.title).replace(/\s*NEW!?\s*$/i,'').trim();
+       accept(job);
+      }catch(error){report.failed.push({url:item.url,title:item.title,error:error.message});}
+     }));
+     if(offset%30===0)await progress(company+': '+Math.min(offset+3,sources.length)+'/'+sources.length+'件、採用候補 '+report.accepted+'件');
+    }
+    report.complete=true;
+   }
+  }catch(error){report.failed.push({error:error.message});}
+  await progress(company+': 採用候補 '+report.accepted+'件 / 除外 '+report.excluded+'件 / 取得できない求人 '+report.failed.length+'件');
+ }
+ const unique=new Map();for(const job of jobs)unique.set(job.sourceUrl,job);
+ await fetch('/results',{method:'POST',body:JSON.stringify({jobs:[...unique.values()],reports,backupCreatedAt:snapshot.createdAt})});
+})();
+</script>

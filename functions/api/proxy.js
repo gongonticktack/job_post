@@ -1,6 +1,15 @@
 const ALLOWED_HOSTS = new Set([
   "www.jobs.global.fujitsu.com",
-  "nttdata-career.jposting.net"
+  "nttdata-career.jposting.net",
+  "jobs.nec-careers.com",
+  "progres07.jposting.net",
+  "jsd.jposting.net",
+  "js03.jposting.net",
+  "toyota-career.snar.jp",
+  "www.accenture.com",
+  "www.ibm.com",
+  "careers.ibm.com",
+  "www-api.ibm.com"
 ]);
 
 export async function onRequestOptions() {
@@ -47,6 +56,7 @@ export async function onRequestPost({ request }) {
   const contentType = upstream.headers.get("Content-Type");
   if (contentType) responseHeaders.set("Content-Type", contentType);
   responseHeaders.set("Cache-Control", "no-store");
+  responseHeaders.set("X-Upstream-URL", upstream.url || target.href);
 
   // Preserve the original bytes and charset; text() would corrupt EUC-JP HTML.
   return new Response(await upstream.arrayBuffer(), {
