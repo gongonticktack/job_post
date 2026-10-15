@@ -29,9 +29,8 @@
     <main>
       <section id="dashboard" class="view is-active">
         <div class="page-intro">
-          <div><p class="eyebrow">JOB EXPLORER</p><h2>求人を、条件で見渡す。</h2>
-          <p>スキル・資格・年収・地域から、気になる仕事を探す。</p></div>
-          <button id="toggleFilterButton" class="ghost-button" type="button" aria-expanded="false" aria-controls="explorerFilters">絞り込み条件</button>
+          <div><h2>今、一番求められているスキルを</h2></div>
+          <button id="toggleFilterButton" class="ghost-button" type="button" aria-expanded="false" aria-controls="additionalFilterHeading regionPanel incomePanel certificationPanel companyPanel">その他の絞り込み</button>
         </div>
         <div class="metric-grid">
           <article class="metric">
@@ -46,7 +45,7 @@
             <span>代表企業</span>
             <div id="representativeCompanies" class="representative-list">-</div>
           </article>
-          <article class="metric"><span>勤務地の地域数</span><strong id="regionCount">0</strong></article>
+          <article class="metric"><span>勤務地の都道府県数</span><strong id="regionCount">0</strong></article>
           <article class="metric">
             <span id="avgIncomeLabel">平均年収</span>
             <strong id="avgIncome">-</strong>
@@ -55,12 +54,12 @@
 
         <div class="dashboard-layout">
           <div id="explorerFilters" class="insight-column">
-            <div class="filter-heading"><h2>条件で絞り込む</h2><button id="resetAllFilters" class="ghost-button compact-button" type="button">すべて解除</button></div>
-            <section class="panel compact-panel">
-              <label class="region-label" for="regionFilter">勤務地・地域</label>
-              <select id="regionFilter"><option value="">すべての地域</option></select>
+            <div id="additionalFilterHeading" class="filter-heading"><h2>条件で絞り込む</h2><button id="resetAllFilters" class="ghost-button compact-button" type="button">すべて解除</button></div>
+            <section id="regionPanel" class="panel compact-panel">
+              <label class="region-label" for="regionFilter">勤務地（都道府県）</label>
+              <select id="regionFilter"><option value="">すべての都道府県</option></select>
             </section>
-            <section class="panel compact-panel">
+            <section id="incomePanel" class="panel compact-panel">
               <div class="panel-head">
                 <h2>年収</h2>
                 <button id="resetIncomeFilter" class="ghost-button compact-button" type="button" hidden>年収条件リセット</button>
@@ -82,7 +81,7 @@
               </div>
             </section>
 
-            <section class="panel">
+            <section class="panel skill-filter-panel">
               <div class="panel-head">
                 <h2>スキル</h2>
                 <div class="panel-actions">
@@ -96,7 +95,7 @@
               <div id="skillChart" class="skill-chart empty">データがありません</div>
             </section>
 
-            <section class="panel compact-panel">
+            <section id="certificationPanel" class="panel compact-panel">
               <div class="panel-head">
                 <h2>資格</h2>
                 <button id="resetCertificationFilters" class="ghost-button compact-button" type="button" hidden>資格条件リセット</button>
@@ -104,7 +103,7 @@
               <div id="certificationChart" class="skill-chart certification-cloud empty">データがありません</div>
             </section>
 
-            <section class="panel compact-panel">
+            <section id="companyPanel" class="panel compact-panel">
               <div class="panel-head">
                 <h2>企業</h2>
                 <button id="resetCompanyFilters" class="ghost-button compact-button" type="button" hidden>企業条件リセット</button>
@@ -116,6 +115,7 @@
           <section class="panel results-panel">
             <div class="panel-head">
               <h2>求人一覧 <span id="resultCount" class="result-count" aria-live="polite">0件</span></h2>
+              <p id="jobLoadStatus" role="status" hidden></p>
               <div class="job-list-tools">
                 <div class="sort-menu">
                   <button id="sortMenuButton" class="icon-button" type="button" aria-label="ソート条件" aria-expanded="false">⇅</button>

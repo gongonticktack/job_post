@@ -253,8 +253,7 @@ init();
 async function init() {
   state.db = await openDb();
   state.supabase = await loadSupabaseConfig();
-  await loadParserSettings();
-  await loadDictionarySettings();
+  await Promise.all([loadParserSettings(), loadDictionarySettings()]);
   bindEvents();
   await refresh();
 }
@@ -718,11 +717,19 @@ function buildDictionaryMeta(rows) {
 async function refresh() {
   if (state.supabase) {
     try {
-      state.jobs = await getSupabaseJobs();
+      setJobLoadStatus("求人を読み込んでいます…");
+      state.jobs = await getSupabaseJobs({ summaryOnly: true, onPage: jobs => {
+        state.jobs = jobs;
+        render();
+        setJobLoadStatus(`${jobs.length.toLocaleString("ja-JP")}件を表示中。残りを読み込んでいます（集計は取得済み分）…`);
+      } });
       render();
+      setJobLoadStatus("");
       return;
     } catch (error) {
-      setStatus(`Supabase取得に失敗したため、ブラウザ内DBを表示します: ${error.message}`);
+      setJobLoadStatus("読み込みに失敗しました。表示内容は未更新または一部です。再読み込みしてください。");
+      setStatus(`Supabase取得に失敗しました: ${error.message}`);
+      return;
     }
   }
 
@@ -738,6 +745,11 @@ async function refresh() {
 }
 
 let jobSaveQueue = Promise.resolve();
+
+function setJobLoadStatus(message) {
+  const status = document.querySelector("#jobLoadStatus");
+  if (status) { status.textContent = message; status.hidden = !message; }
+}
 
 function saveJobs(jobs) {
   const operation = jobSaveQueue.then(() => saveJobBatch(jobs));
@@ -847,16 +859,38 @@ async function supabaseRequest(path, options = {}) {
   return body;
 }
 
-async function getSupabaseJobs() {
-  const rows = [];
+async function getSupabaseJobs({ summaryOnly = false, onPage } = {}) {
+  const jobs = [];
+  // Search/filter fields stay available; the large source archive is fetched on demand.
+  const columns = summaryOnly
+    ? "id,title,description,annual_income_min,annual_income_max,annual_income_raw,required_skills,preferred_skills,appeal_points,required_language,required_certifications,preferred_language,preferred_certifications,location,notes,input_method,source_url,crawled_at,companies(name)"
+    : "*,companies(name)";
   // Full source archives are large; keep each database response bounded.
   const pageSize = 200;
   for (let offset = 0; ; offset += pageSize) {
-    const page = await supabaseRequest(`jobs?select=*,companies(name)&order=crawled_at.desc,id.desc&limit=${pageSize}&offset=${offset}`);
-    rows.push(...page);
+    const page = await supabaseRequest(`jobs?select=${columns}&order=crawled_at.desc,id.desc&limit=${pageSize}&offset=${offset}`);
+    jobs.push(...page.map(row => ({ ...toClientJob(row), ...(summaryOnly ? { archivePending: true } : {}) })));
+    if (onPage && page.length) await onPage([...jobs]);
     if (page.length < pageSize) break;
   }
-  return rows.map(toClientJob);
+  return jobs;
+}
+
+const jobArchiveRequests = new Map();
+async function ensureJobArchive(job) {
+  if (!job.archivePending) return job;
+  if (!jobArchiveRequests.has(job)) {
+    const request = (async () => {
+      const rows = await supabaseRequest(`jobs?select=reference_info&id=eq.${encodeURIComponent(job.id)}&limit=1`);
+      if (!rows.length) throw new Error("求人が見つかりません。再読み込みしてください。");
+      const archive = decodeJobReference(rows[0].reference_info);
+      Object.assign(job, { referenceInfo: archive.referenceInfo || "", sourceDocument: archive.sourceDocument || null, archivePending: false });
+      return job;
+    })();
+    jobArchiveRequests.set(job, request);
+    request.finally(() => jobArchiveRequests.delete(job)).catch(() => {});
+  }
+  return jobArchiveRequests.get(job);
 }
 
 async function saveSupabaseJobs(jobs) {
@@ -935,6 +969,7 @@ function normalizeClientJob(job) {
   return {
     ...job,
     company,
+    location: cleanJobLocation(job.location),
     salaryEstimate: estimateMissingIncome({ ...job, company }),
     requiredSkills,
     preferredSkills: cleanSkillList(job.preferredSkills || [], parser).filter(skill => !requiredSkills.includes(skill))
@@ -1062,7 +1097,8 @@ async function cleanupSavedData() {
     let updatedCount = 0;
     let removedSkillCount = 0;
 
-    for (const job of state.jobs) {
+    const jobs = state.supabase ? await getSupabaseJobs() : state.jobs;
+    for (const job of jobs) {
       const cleaned = repairJobRequirements(job);
       const cleanedIncome = cleanJobIncome(job);
       if (!hasSkillListChanged(job.requiredSkills, cleaned.requiredSkills)
@@ -1110,6 +1146,11 @@ async function cleanupSavedData() {
 }
 
 async function reparseSavedDocuments() {
+  if (state.supabase) {
+    setSettingsJobStatus("再解析用の全文を読み込んでいます…");
+    try { state.jobs = await getSupabaseJobs(); }
+    catch (error) { setSettingsJobStatus(`全文の読み込みに失敗しました: ${error.message}`); return; }
+  }
   const jobs = state.jobs.filter((job) => job.sourceDocument?.fullText);
   if (!jobs.length) { setSettingsJobStatus("全文が保存された求人がありません。求人を再取得してください。"); return; }
   if (!window.confirm(`保存済みの求人全文${jobs.length}件を、現在の抽出ルールで再解析しますか？`)) return;
@@ -1225,13 +1266,55 @@ function render() {
 const PREFECTURE_NAMES = "北海道 青森県 岩手県 宮城県 秋田県 山形県 福島県 茨城県 栃木県 群馬県 埼玉県 千葉県 東京都 神奈川県 新潟県 富山県 石川県 福井県 山梨県 長野県 岐阜県 静岡県 愛知県 三重県 滋賀県 京都府 大阪府 兵庫県 奈良県 和歌山県 鳥取県 島根県 岡山県 広島県 山口県 徳島県 香川県 愛媛県 高知県 福岡県 佐賀県 長崎県 熊本県 大分県 宮崎県 鹿児島県 沖縄県".split(" ");
 
 function getJobRegions(job) {
-  const location = cleanText(job.location);
+  const location = getLocationSearchText(job.location);
   if (!location) return ["地域未取得"];
-  const regions = PREFECTURE_NAMES.filter((name) => location.includes(name)
-    || (name === "京都府" ? /(?<!東)京都/.test(location)
-      : name !== "北海道" && location.includes(name.slice(0, -1))));
-  if (/海外/.test(location)) regions.push("海外");
-  return regions.length ? regions : [location];
+  const regions = new Set();
+  PREFECTURE_NAMES.forEach((name) => {
+    const short = name === "北海道" ? name : name.slice(0, -1);
+    const pattern = name === "京都府" ? /(?<!東)京都/ : new RegExp(short);
+    if (pattern.test(location)) regions.add(name);
+  });
+  LOCATION_ALIASES.forEach(([pattern, prefecture]) => {
+    if (pattern.test(location)) regions.add(prefecture);
+  });
+  if (/海外|アメリカ|米国|ソウル|韓国|台北|台湾|タイ[（(]|バンコク|インド|シンガポール|フィリピン|マニラ|ジャカルタ/i.test(location)) regions.add("海外");
+  if (/首都圏|関東|関西|全国|^日本$|^国内$/.test(location)) regions.add("全国・広域");
+  return regions.size ? [...regions] : ["地域未取得"];
+}
+
+// City names are matched as words in English; office aliases are intentionally specific.
+const LOCATION_ALIASES = [
+  [/\bSapporo\b|札幌/i, "北海道"], [/\bSendai\b|仙台/i, "宮城県"],
+  [/\bAizuwakamatsu\b|会津若松/i, "福島県"], [/\bMaebashi\b|前橋/i, "群馬県"],
+  [/\bTokyo\b|都内|豊洲|品川|大手町|新宿|日比谷|吉祥寺|初台|渋谷|泉岳寺|神保町|大井町|三鷹|市[ヶケ]谷|蒲田|大森山王ビル/i, "東京都"],
+  [/\bYokohama\b|\bKawasaki\b|横浜|川崎|武蔵小杉|玉川事業[場所]/i, "神奈川県"],
+  [/\bNagoya(?:\s*Hub)?\b|名古屋|豊田市/i, "愛知県"],
+  [/\bOsaka\b/i, "大阪府"], [/\bFukuoka\b/i, "福岡県"],
+  [/\bKumamoto\b/i, "熊本県"], [/沼津|裾野市/, "静岡県"],
+  [/千葉ニュータウン/, "千葉県"],
+  [/小山工場/, "栃木県"], [/松山第[2２二]電気ビル/, "愛媛県"],
+  // Official Fujitsu office address: https://global.fujitsu/ja-jp/about/corporate/facilities/kawasaki
+  [/^(?:Fujitsu\s+)?Technology\s+Park\b/i, "神奈川県"]
+];
+
+function cleanJobLocation(raw) {
+  let location = String(raw || "").trim();
+  // These labels mark the end of the location section, not another work site.
+  location = location.split(/(?:【?その他参考URL】?|この職種[へに]応募|職種一覧[へに]戻る|応募方法|関連タグ|ピックアップ|関連リンク|Apply for this job|Back to Open Positions)/i)[0];
+  location = location.split(/https?:\/\/|[\w.+-]+@[\w.-]+\.[a-z]{2,}/i)[0];
+  location = location.replace(/^[\s*・]+/, "").trim();
+  if (/^NRI(?: ITソリューションズ)?アメリカ/.test(location)) location = "アメリカ";
+  location = location.replace(/\s*[*＊].*$/, "");
+  location = location.replace(/^は(.+?)ですが、.*$/, "$1");
+  if (/^希望用】|^システムコンサルティング分野$/.test(location)) return "";
+  return cleanText(location);
+}
+
+function getLocationSearchText(raw) {
+  // Travel and possible future assignments are not the advertised work location.
+  return cleanJobLocation(raw).normalize("NFKC").split(/※|【遠隔勤務】|将来的に|への出張|に出張/)[0].trim()
+    .replace(/^当面は客先常駐[（(]府中[）)]$/, "東京都府中市")
+    .replace(/[,、・\s]*(?:西日本拠点|全国拠点)[（(].*$/, "");
 }
 
 function resetAllFilters() {
@@ -1245,12 +1328,13 @@ function resetAllFilters() {
 function renderExplorerControls(visibleJobs) {
   const counts = new Map();
   state.jobs.forEach((job) => getJobRegions(job).forEach((region) => counts.set(region, (counts.get(region) || 0) + 1)));
-  els.regionFilter.replaceChildren(new Option("すべての地域", ""));
-  [...counts].sort(([a], [b]) => a.localeCompare(b, "ja")).forEach(([region, count]) => {
+  els.regionFilter.replaceChildren(new Option("すべての都道府県", ""));
+  [...PREFECTURE_NAMES, "海外", "全国・広域", "地域未取得"].filter(region => counts.has(region)).forEach((region) => {
+    const count = counts.get(region);
     els.regionFilter.add(new Option(`${region} (${count})`, region));
   });
   els.regionFilter.value = state.regionFilter;
-  els.regionCount.textContent = new Set(visibleJobs.flatMap(getJobRegions).filter((region) => region !== "地域未取得")).size;
+  els.regionCount.textContent = new Set(visibleJobs.flatMap(getJobRegions).filter((region) => PREFECTURE_NAMES.includes(region))).size;
   els.resultCount.textContent = `${visibleJobs.length} / ${state.jobs.length}件`;
   els.activeFilters.replaceChildren();
   function chip(label, remove) {
@@ -1422,7 +1506,7 @@ function renderMetrics(jobs) {
   els.companyCount.textContent = companyCounts.length;
   renderRepresentativeCompanies(companyCounts);
   els.avgIncome.textContent = avg ? `${avg}万円` : "-";
-  document.querySelector("#avgIncomeLabel").textContent = jobs.some((job) => job.salaryEstimate) ? "平均年収（推定含む）" : "平均年収";
+  document.querySelector("#avgIncomeLabel").textContent = "平均年収";
 }
 
 function countCompanies(jobs) {
@@ -1737,7 +1821,32 @@ function renderJobList(container, jobs) {
     setHighlightedText(card.querySelector(".income"), getJobIncomeDisplay(job), highlightTerms);
     card.querySelector(".income").classList.toggle("is-estimated", Boolean(job.salaryEstimate));
     renderMatchSummary(card.querySelector(".match-summary"), getJobMatchSummary(job, highlightTerms));
-    renderJobDetails(card, job, highlightTerms);
+    const details = card.querySelector(".job-detail-block");
+    let rendered = false;
+    let loading = false;
+    details.addEventListener("toggle", async () => {
+      if (!details.open || rendered || loading) return;
+      loading = true;
+      const content = card.querySelector(".job-detail-content");
+      content.querySelector("[data-archive-status]")?.remove();
+      const status = document.createElement("p");
+      status.dataset.archiveStatus = "";
+      renderJobDetails(card, job, highlightTerms);
+      details.hidden = false;
+      content.prepend(status);
+      try {
+        if (rawJob.archivePending) {
+          status.textContent = "保存した全文を読み込んでいます…";
+          await ensureJobArchive(rawJob);
+        }
+        renderJobDetails(card, { ...job, referenceInfo: rawJob.referenceInfo, sourceDocument: rawJob.sourceDocument }, highlightTerms);
+        details.hidden = false;
+        rendered = true;
+        status.remove();
+      } catch (error) {
+        status.textContent = `全文を取得できませんでした: ${error.message} 閉じて開くと再試行します。`;
+      } finally { loading = false; }
+    });
     renderJobMeta(card.querySelector(".job-meta"), job);
     renderHighlightedList(card.querySelector(".required"), job.requiredSkills || [], highlightTerms);
     renderHighlightedList(card.querySelector(".preferred"), job.preferredSkills || [], highlightTerms);
@@ -1917,7 +2026,7 @@ function normalizeHighlightTerms(terms) {
 
 function renderJobMeta(container, job) {
   const items = [
-    ["勤務地", job.location],
+    ["勤務地", cleanJobLocation(job.location)],
     ["英語", job.preferredLanguage || job.requiredLanguage]
   ].filter(([, value]) => value);
   container.innerHTML = "";
@@ -2168,7 +2277,7 @@ function getDictionaryUsage() {
 function renderSettingsOverview() {
   const overview = document.querySelector("#settingsOverview"); if (!overview) return;
   overview.replaceChildren();
-  for (const [label, count] of [["保存求人", state.jobs.length], ["原文あり", state.jobs.filter(job => job.sourceDocument?.fullText).length], ["スキル", window.JobParserConfig.skillDictionary.length], ["資格", window.JobParserConfig.certificationDictionary.length]]) {
+  for (const [label, count] of [["保存求人", state.jobs.length], [state.jobs.some(job => job.archivePending) ? "原文確認済み" : "原文あり", state.jobs.filter(job => job.sourceDocument?.fullText).length], ["スキル", window.JobParserConfig.skillDictionary.length], ["資格", window.JobParserConfig.certificationDictionary.length]]) {
     const item = document.createElement("span"); const number = document.createElement("strong"); number.textContent = count.toLocaleString("ja-JP"); item.append(number, document.createTextNode(label)); overview.append(item);
   }
 }
@@ -2788,6 +2897,7 @@ function parseManualJobText(text, fallbackCompany, { forceCompany = false } = {}
   const income = parseIncome(annualIncomeSource);
   const annualIncomeRaw = formatIncomeRaw(annualIncomeSource, income);
   let location = pickSection(normalized, headings.location, parser);
+  location = cleanJobLocation(location);
   if (company === "トヨタ自動車株式会社") {
     location = extractLocationLines(location) || location;
   }
@@ -3084,7 +3194,11 @@ function getTitlePattern(parser) {
 function pickSection(text, labels = [], parser = getCompanyParser()) {
   const lines = text.split("\n");
   const headings = parser.sectionHeadings || [];
-  const start = lines.findIndex((line) => labels.some((label) => isLabelLine(line, label)));
+  const start = lines.findIndex((line) => labels.some((label) => {
+    if (!label.includes("勤務地")) return isLabelLine(line, label);
+    const trimmed = line.trim();
+    return trimmed === label || [" ", "\t", ":", "："].some(separator => trimmed.startsWith(label + separator));
+  }));
   if (start < 0) return "";
   const values = [];
   const inlineValue = getInlineLabelValue(lines[start], labels);

@@ -43,7 +43,7 @@ try{
  let actual;
  for(let i=0;i<120;i++){
   await new Promise(resolve=>setTimeout(resolve,1000));
-  const result=await call('Runtime.evaluate',{expression:`typeof state==='undefined'?null:({jobs:state.jobs.length,archives:state.jobs.filter(j=>j.sourceDocument?.fullText).length,cards:document.querySelectorAll('#jobList .job-card').length,count:document.querySelector('#resultCount')?.textContent,companies:new Set(state.jobs.map(j=>j.company)).size,reparse:!!document.querySelector('#reparseDocumentsButton'),estimated:state.jobs.filter(j=>j.salaryEstimate).length,estimatedCards:document.querySelectorAll('#jobList .income.is-estimated').length,estimateSources:document.querySelectorAll('#jobList .income-estimate:not([hidden]) .income-estimate-source').length,averageLabel:document.querySelector('#avgIncomeLabel')?.textContent})`,returnByValue:true});
+  const result=await call('Runtime.evaluate',{expression:`typeof state==='undefined'?null:({jobs:state.jobs.length,archives:state.jobs.filter(j=>j.sourceDocument?.fullText).length,pendingArchives:state.jobs.filter(j=>j.archivePending).length,cards:document.querySelectorAll('#jobList .job-card').length,count:document.querySelector('#resultCount')?.textContent,companies:new Set(state.jobs.map(j=>j.company)).size,reparse:!!document.querySelector('#reparseDocumentsButton'),estimated:state.jobs.filter(j=>j.salaryEstimate).length,estimatedCards:document.querySelectorAll('#jobList .income.is-estimated').length,estimateSources:document.querySelectorAll('#jobList .income-estimate:not([hidden]) .income-estimate-source').length,averageLabel:document.querySelector('#avgIncomeLabel')?.textContent})`,returnByValue:true});
   actual=result.result.value;
   if(actual?.cards===expected.after)break;
  }
@@ -52,9 +52,27 @@ try{
   console.log('Loading diagnostic',JSON.stringify(diagnostic.result.value));
  }
  assert.equal(actual?.jobs,expected.after,'Database jobs did not all load');
- assert.equal(actual.archives,expected.after,'Missing source archives');
+ assert.equal(actual.pendingArchives,expected.after,'Source archives should be deferred');assert.equal(actual.archives,0,'Archives loaded eagerly');
  assert.equal(actual.cards,expected.after,'List did not render all jobs');
  assert.equal(actual.companies,8);assert.ok(actual.reparse);
+ if(process.argv.includes('--mobile')){
+  const suffix=process.argv.includes('--before')?'before':'after';
+  for(const width of [360,390,430]){
+   await call('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:true});
+   await call('Runtime.evaluate',{expression:'window.scrollTo(0,0)'});
+   const shot=await call('Page.captureScreenshot',{format:'png'});
+   await writeFile(new URL(`../.data-backups/mobile-${width}-${suffix}.png`,import.meta.url),Buffer.from(shot.data,'base64'));
+   const layout=(await call('Runtime.evaluate',{expression:`({viewport:innerWidth,content:document.documentElement.scrollWidth,filterVisible:getComputedStyle(document.querySelector('#explorerFilters')).display!=='none',titleSize:getComputedStyle(document.querySelector('#jobList h3')).fontSize})`,returnByValue:true})).result.value;
+   assert.ok(layout.content<=layout.viewport,`Mobile overflow at ${width}`);
+   assert.equal(layout.filterVisible,false,'Filters should start collapsed');
+   console.log('MOBILE',width,JSON.stringify(layout));
+  }
+  await call('Runtime.evaluate',{expression:`document.querySelector('#toggleFilterButton').click();window.scrollTo(0,0)`});
+  const filterState=(await call('Runtime.evaluate',{expression:`({expanded:document.querySelector('#toggleFilterButton').getAttribute('aria-expanded'),display:getComputedStyle(document.querySelector('#explorerFilters')).display})`,returnByValue:true})).result.value;
+  assert.equal(filterState.expanded,'true');assert.notEqual(filterState.display,'none');
+  const filters=await call('Page.captureScreenshot',{format:'png'});await writeFile(new URL(`../.data-backups/mobile-filters-${suffix}.png`,import.meta.url),Buffer.from(filters.data,'base64'));
+  await call('Runtime.evaluate',{expression:`document.querySelector('#toggleFilterButton').click()`});
+ }
  if(process.argv.includes('--details')){
   await call('Emulation.setDeviceMetricsOverride',{width:1680,height:1000,deviceScaleFactor:1,mobile:false});
   await call('Runtime.evaluate',{expression:`document.querySelector('#jobList .job-card').scrollIntoView({block:'start'})`});
@@ -62,6 +80,7 @@ try{
   const closed=(await call('Runtime.evaluate',{expression:measure,returnByValue:true})).result.value;
   assert.ok(closed.height>=36&&closed.width>=110,'Details control is too small');assert.equal(closed.label,'詳細を確認');
   await call('Runtime.evaluate',{expression:`document.querySelector('#jobList .job-card .job-detail-block > summary').click()`});
+  await new Promise(resolve=>setTimeout(resolve,1000));
   const opened=(await call('Runtime.evaluate',{expression:measure,returnByValue:true})).result.value;
   assert.equal(opened.label,'詳細を閉じる');assert.ok(Math.abs(closed.top-opened.top)<2&&Math.abs(closed.left-opened.left)<20,'Control moved when expanded');assert.ok(opened.bodyWidth>opened.cardWidth*.95,'Expanded details do not use row width');assert.ok(opened.content<=opened.viewport,'Desktop details overflow');
   const desktop=await call('Page.captureScreenshot',{format:'png'});await writeFile(new URL('../.data-backups/details-desktop.png',import.meta.url),Buffer.from(desktop.data,'base64'));
@@ -73,7 +92,7 @@ try{
   await call('Runtime.evaluate',{expression:`document.querySelector('#jobList .job-card .job-detail-block > summary').click()`});
   console.log('DETAILS',JSON.stringify({closed,opened,mobile}));
  }
- if(incomeExpected){assert.equal(actual.estimated,incomeExpected.estimated);assert.equal(actual.estimatedCards,incomeExpected.estimated);assert.equal(actual.estimateSources,incomeExpected.estimated);assert.equal(actual.averageLabel,'平均年収（推定含む）');}
+ if(incomeExpected){assert.equal(actual.estimated,incomeExpected.estimated);assert.equal(actual.estimatedCards,incomeExpected.estimated);assert.equal(actual.estimateSources,0,'Closed details should not be rendered');assert.equal(actual.averageLabel,'平均年収');}
  const filter=await call('Runtime.evaluate',{expression:`document.querySelector('#regionFilter').value='東京都';document.querySelector('#regionFilter').dispatchEvent(new Event('change'));({cards:document.querySelectorAll('#jobList .job-card').length,count:document.querySelector('#resultCount').textContent})`,returnByValue:true});
  assert.ok(filter.result.value.cards>0&&filter.result.value.cards<expected.after,'Region filter did not narrow jobs');
  assert.equal(errors.length,0,errors.join('\n'));

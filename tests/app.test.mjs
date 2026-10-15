@@ -61,6 +61,29 @@ test('region filter supports multiple locations and combines with income and sea
  assert.equal(vm.runInContext(`getJobRegions({location:''})[0]`,ctx),'地域未取得');
  assert.equal(vm.runInContext(`getJobRegions({location:'東京都'}).includes('京都府')`,ctx),false);
 });
+test('prefecture facets normalize cities and offices without exposing raw text or future travel',()=>{
+ const ctx=setup();
+ const regions=location=>JSON.parse(vm.runInContext(`JSON.stringify(getJobRegions({location:${JSON.stringify(location)}}))`,ctx));
+ assert.deepEqual(regions('Tokyo / Osaka / Yokohama / Aizuwakamatsu / Maebashi'),['福島県','群馬県','東京都','神奈川県','大阪府']);
+ assert.deepEqual(regions('Fujitsu Uvance Kawasaki Tower'),['神奈川県']);
+ assert.deepEqual(regions('Ｆｕｊｉｔｓｕ Ｔｅｃｈｎｏｌｏｇｙ Ｐａｒｋ'),['神奈川県']);
+ assert.deepEqual(regions('東京・横浜 その他参考URL 大阪 https://example.com'),['東京都','神奈川県']);
+ assert.deepEqual(regions('東京（高輪） ※将来的に海外駐在となる可能性があります'),['東京都']);
+ assert.deepEqual(regions('東京（品川）、西日本拠点（大阪、名古屋）への出張あり'),['東京都']);
+ assert.deepEqual(regions('首都圏'),['全国・広域']);
+ assert.deepEqual(regions('日本'),['全国・広域']);
+ assert.deepEqual(regions('ソウル* 応募方法 ご連絡ください'),['海外']);
+ assert.deepEqual(regions('不明なビル'),['地域未取得']);
+ assert(!regions('東京都府中市').includes('京都府'));
+});
+
+test('location cleanup removes navigation and manual parsing skips title mentions',()=>{
+ const ctx=setup();
+ assert.equal(vm.runInContext(`cleanJobLocation('横浜 【その他参考URL】 https://example.com この職種へ応募 職種一覧へ戻る')`,ctx),'横浜');
+ assert.equal(vm.runInContext(`cleanJobLocation('神奈川県川崎市 この職種へ応募 / Apply for this job 関連タグ')`,ctx),'神奈川県川崎市');
+ assert.equal(vm.runInContext(`parseManualJobText('【複数勤務地希望用】システムコンサルティング分野\\n職務内容\\n開発\\n勤務地\\n東京・横浜\\nこの職種へ応募\\n職種一覧へ戻る','株式会社野村総合研究所',{forceCompany:true}).location`,ctx),'東京・横浜');
+});
+
 test('qualifications exclude products and role names, normalize aliases, and avoid duplicate prefixes',()=>{
  const ctx=setup();
  const result=vm.runInContext(`extractCertificationsFromText('SAP S/4HANAやAnaplanを利用。プロジェクトマネージャとして勤務。PMP、応用情報処理技術者の資格を保有。AWS Certified Solutions Architect - Associate')`,ctx);
@@ -117,6 +140,56 @@ test('database loading reads beyond the default 1000-row cap and preserves every
  assert.equal(jobs.length,1203);
  assert.equal(jobs[1202].sourceDocument.fullText,'Full source 1202');
  assert.equal(vm.runInContext('requests.length',ctx),7);
+});
+
+test('summary loading excludes archives and publishes each page before requesting the next',async()=>{
+ const ctx=setup();
+ vm.runInContext(`var pages=[];
+ supabaseRequest=async path=>{
+  requests.push(path);
+  const query=new URL('https://example.test/'+path).searchParams;
+  if(Number(query.get('offset'))===200) {
+   if(pages.length!==1 || pages[0].length!==200) throw Error('First page was not published');
+   return [{id:201,title:'後続求人',description:'検索対象の本文',companies:{name:'NEC'}}];
+  }
+  return Array.from({length:200},(_,id)=>({id,title:'開発',companies:{name:'NEC'}}));
+ };`,ctx);
+ const jobs=await vm.runInContext('getSupabaseJobs({summaryOnly:true,onPage:jobs=>pages.push(jobs)})',ctx);
+ assert.equal(jobs.length,201);assert.equal(jobs[200].description,'検索対象の本文');
+ assert.equal(jobs[200].archivePending,true);assert.equal(jobs[200].sourceDocument,null);
+ assert.equal(vm.runInContext('pages[0].length',ctx),200);
+ for(const path of vm.runInContext('requests',ctx)){
+  const select=new URL('https://example.test/'+path).searchParams.get('select');
+  assert(!select.includes('*'));assert(!select.includes('reference_info'));assert(select.includes('required_skills'));
+ }
+});
+
+test('archive requests are shared, cached and retryable without losing summary fields',async()=>{
+ const ctx=setup();
+ vm.runInContext(`var job={id:42,title:'開発',archivePending:true};
+ supabaseRequest=async path=>{requests.push(path);throw Error('offline')};`,ctx);
+ await assert.rejects(vm.runInContext('ensureJobArchive(job)',ctx),/offline/);
+ assert.equal(vm.runInContext('job.archivePending',ctx),true);
+ vm.runInContext(`supabaseRequest=async path=>{requests.push(path);return [{reference_info:encodeJobReference({referenceInfo:'条件',sourceDocument:{fullText:'全文'}})}]};`,ctx);
+ await vm.runInContext('Promise.all([ensureJobArchive(job),ensureJobArchive(job)])',ctx);
+ await vm.runInContext('ensureJobArchive(job)',ctx);
+ assert.equal(vm.runInContext('requests.length',ctx),2);
+ assert.equal(vm.runInContext('job.title',ctx),'開発');
+ assert.equal(vm.runInContext('job.sourceDocument.fullText',ctx),'全文');
+ assert.equal(vm.runInContext('job.referenceInfo',ctx),'条件');
+ assert.equal(vm.runInContext('job.archivePending',ctx),false);
+});
+
+test('partial loading errors keep displayed remote jobs instead of replacing them with local data',async()=>{
+ const ctx=setup();
+ vm.runInContext(`state.supabase={};var rendered=0;var statuses=[];
+ render=()=>rendered++;setStatus=message=>statuses.push(message);setJobLoadStatus=message=>statuses.push(message);
+ getSupabaseJobs=async({onPage})=>{await onPage([{id:1,title:'取得済み'}]);throw Error('offline')};
+ getAllLocalJobs=async()=>{throw Error('Must not replace partial remote results')};`,ctx);
+ await vm.runInContext('refresh()',ctx);
+ assert.equal(vm.runInContext('state.jobs[0].title',ctx),'取得済み');
+ assert.equal(vm.runInContext('rendered',ctx),1);
+ assert(vm.runInContext('statuses.some(s=>s.includes("一部"))',ctx));
 });
 
 test('employee salary estimates use role evidence, preserve advertised pay and round-trip separately',()=>{

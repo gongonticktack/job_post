@@ -1562,8 +1562,9 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px soli
   .metric:nth-child(4) { padding-left: 0; }
   .metric strong { font-size: 19px; }
   .dashboard-layout { grid-template-columns: 1fr; }
-  .insight-column { display: none; }
-  .insight-column.is-expanded { display: grid; }
+  .insight-column { display: grid; }
+  .insight-column:not(.is-expanded) > :not(.skill-filter-panel) { display: none; }
+  .skill-filter-panel { order: -1; }
   #jobList h3 { font-size: 14px; }
 }
 
@@ -1635,4 +1636,44 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px soli
   .settings-savebar button { flex: 1; padding: 9px; font-size: 11px; }
   #skillAliasGuide { columns: 1; }
   .settings-data-actions { grid-template-columns: 1fr; }
+}
+
+/* Keep phone layouts readable, including long labels and narrow screens. */
+@media (max-width: 760px) {
+  .app-header { align-items: stretch; }
+  .header-actions { width: 100%; }
+  .tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 1; }
+  .tab { min-width: 0; min-height: 44px; padding: 8px 4px; font-size: 12px; white-space: nowrap; }
+  .settings-button { min-width: 44px; min-height: 44px; font-size: 12px; }
+  .brand h1 { line-height: 1; }
+  .page-intro { flex-wrap: wrap; align-items: flex-start; }
+  .page-intro > div { flex: 1 1 100%; }
+  #toggleFilterButton { min-height: 44px; font-size: 12px; }
+  .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 0; }
+  .metric, .metric:first-child, .metric:nth-child(4) {
+    width: auto; flex-direction: column; align-items: flex-start; gap: 6px; padding: 0 12px;
+    border: 0;
+  }
+  .metric:nth-child(even) { padding-left: 0; border-right: 1px solid var(--line); }
+  .metric:first-child { padding-left: 0; border-right: 1px solid var(--line); }
+  .metric:nth-child(2) { padding-left: 12px; border-right: 0; }
+  .metric span { font-size: 11px; line-height: 1.6; }
+  .metric strong { font-size: 22px; line-height: 1.2; white-space: nowrap; }
+  input:not([type="range"]):not([type="checkbox"]), select, textarea,
+  .search-box input, #regionFilter, .insight-column .panel-actions select { font-size: 16px; }
+  .search-box input, select, .icon-button { min-height: 44px; }
+  .cloud-word, .trend-collapse summary, .filter-heading button,
+  .insight-column .compact-button, .active-filters button { min-height: 44px; }
+  .cloud-word { max-width: 100%; overflow-wrap: anywhere; }
+  #jobList .job-meta span { overflow-wrap: anywhere; }
+  #jobList .source { min-height: 44px; display: inline-flex; align-items: center; margin-top: 0; }
+  #jobList .job-detail-block > summary { min-height: 44px; }
+  .job-detail-content { padding: 12px; }
+  .settings-pagination { flex-wrap: wrap; }
+  .settings-pagination > div { flex-wrap: wrap; }
+  .settings-tabs button { min-height: 44px; }
+  .settings-toolbar label { flex: 1 1 120px; }
+  #settings .dictionary-head { flex-direction: column; align-items: stretch; }
+  #settings .dictionary-head button { min-height: 44px; width: 100%; }
+  #settings .dictionary-row input, #settings .dictionary-row select { font-size: 16px; min-height: 44px; }
 }
